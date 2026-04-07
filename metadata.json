@@ -1,0 +1,7 @@
+{
+  "name": "Vũng Tàu Escape",
+  "description": "A premium travel editorial app for planning trips, tracking expenses, and sharing memories in Vũng Tàu.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

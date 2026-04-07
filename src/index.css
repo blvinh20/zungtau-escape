@@ -1,0 +1,58 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800&family=Manrope:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --font-headline: "Plus Jakarta Sans", sans-serif;
+
+  --color-primary: #005e97;
+  --color-primary-container: #0077be;
+  --color-on-primary: #ffffff;
+  
+  --color-secondary: #6d5e00;
+  --color-secondary-container: #fddc1b;
+  --color-on-secondary-container: #706000;
+  
+  --color-tertiary: #8b4800;
+  --color-tertiary-fixed: #ffdcc4;
+  
+  --color-background: #fdfae7;
+  --color-surface: #fdfae7;
+  --color-surface-container: #f1eedb;
+  --color-surface-container-low: #f7f4e1;
+  --color-surface-container-high: #ece9d6;
+  --color-surface-container-lowest: #ffffff;
+  
+  --color-on-surface: #1c1c11;
+  --color-on-surface-variant: #404751;
+  
+  --color-outline-variant: #c0c7d2;
+  
+  --radius-xl: 1.5rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-on-surface font-sans;
+  }
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.breeze-mask {
+  border-top-left-radius: 1.5rem;
+}
+
+.hero-bg {
+    background-image: linear-gradient(to bottom, rgba(253, 250, 231, 0.4), rgba(253, 250, 231, 1)), url(https://lh3.googleusercontent.com/aida/ADBb0ugHn5tyTSjxE24b5woMTAnhz0k5Qy2RB8cSphJisQjBj1nZGwtheJvIQgDWkPSd7PSWpZr8exs0v-z6O3kn7R8C8LiK711IwiO0bN8euKo7lLrbeOX78TeeD656rNGEhXm9yHzL2nMpoRmbhipxjPXq-I15yTvRSCXoFiWJZPEbr0NRbJX7a3vZxCY3SqBdLYRFOrrZ-VJYxCwAKUPYW3YubEDmA-ptEX6S7Nn-rXOwyMldqOfccBtrb29EwvdFjOd6t9tP7yzeJA);
+    background-size: cover;
+    background-position: center;
+}
