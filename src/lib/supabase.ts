@@ -82,18 +82,26 @@ export const deleteParticipant = async (id: string) => {
 export const getExpenses = async () => {
   const { data, error } = await supabase
     .from('expenses')
-    .select('*, participants(name, initials, color_class)')
+    .select('*, participants!expenses_payer_id_fkey(name, initials, color_class), expense_participants(participant_id)')
     .order('date', { ascending: false });
   if (error) throw error;
   return data;
 };
 
-export const addExpense = async (expense: any) => {
+export const addExpense = async (expense: any, participantIds: string[]) => {
   const { data, error } = await supabase
     .from('expenses')
     .insert([expense])
     .select();
   if (error) throw error;
+  
+  const expenseId = data[0].id;
+  if (participantIds.length > 0) {
+    const junctionData = participantIds.map(pid => ({ expense_id: expenseId, participant_id: pid }));
+    const { error: jError } = await supabase.from('expense_participants').insert(junctionData);
+    if (jError) throw jError;
+  }
+  
   return data[0];
 };
 
@@ -105,13 +113,24 @@ export const deleteExpense = async (id: string) => {
   if (error) throw error;
 };
 
-export const updateExpense = async (id: string, updates: any) => {
+export const updateExpense = async (id: string, updates: any, participantIds: string[]) => {
   const { data, error } = await supabase
     .from('expenses')
     .update(updates)
     .eq('id', id)
     .select();
   if (error) throw error;
+
+  // Update junction table: delete old, insert new
+  const { error: dError } = await supabase.from('expense_participants').delete().eq('expense_id', id);
+  if (dError) throw dError;
+
+  if (participantIds.length > 0) {
+    const junctionData = participantIds.map(pid => ({ expense_id: id, participant_id: pid }));
+    const { error: jError } = await supabase.from('expense_participants').insert(junctionData);
+    if (jError) throw jError;
+  }
+
   return data[0];
 };
 
@@ -139,6 +158,24 @@ export const deleteMemory = async (id: string) => {
     .delete()
     .eq('id', id);
   if (error) throw error;
+};
+
+export const getFundContributions = async () => {
+  const { data, error } = await supabase
+    .from('fund_contributions')
+    .select('*, participants(name, initials, color_class)')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+};
+
+export const addFundContribution = async (contribution: any) => {
+  const { data, error } = await supabase
+    .from('fund_contributions')
+    .insert([contribution])
+    .select();
+  if (error) throw error;
+  return data[0];
 };
 
 export const uploadImage = async (file: File, bucket: string = 'memories') => {

@@ -142,3 +142,16 @@ INSERT INTO activities (day, time, period, title, location, description, image_u
 (2, '13:00', 'Trưa', 'Ăn trưa tổng kết', '44 Trương Định , 18 Hùng Vương', 'Lẩu cá đuối (Hoàng Minh, Cô Hồng).', NULL),
 (2, '14:30', 'Chiều', 'Mua quà & Khởi hành', '17B Nguyễn Trường Tộ', 'Bánh mới ra lò. Bông lan trứng muối Golden, Gốc Cột Điện.', NULL),
 (2, '18:00', 'Chiều', 'Về tới Sài Gòn', 'HCM', 'Kết thúc hành trình. Chia tay nhóm tại HCM.', NULL);
+
+
+-- Junction table for split expenses
+CREATE TABLE expense_participants (
+  expense_id UUID REFERENCES expenses(id) ON DELETE CASCADE,
+  participant_id UUID REFERENCES participants(id) ON DELETE CASCADE,
+  PRIMARY KEY (expense_id, participant_id)
+);
+
+ALTER TABLE expense_participants ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access" ON expense_participants FOR ALL USING (true);
+
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Ẩm thực';

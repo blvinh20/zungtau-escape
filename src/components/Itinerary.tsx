@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PlusCircle, MapPin, Edit2, Trash2, X, Clock, Image as ImageIcon, Loader2, AlertTriangle } from 'lucide-react';
+import { PlusCircle, MapPin, Edit2, Trash2, X, Clock, Image as ImageIcon, Loader2, AlertTriangle, Calendar } from 'lucide-react';
 import { Activity } from '../types';
 import { cn } from '../lib/utils';
 import { getActivities, addActivity as addActivitySupabase, deleteActivity as deleteActivitySupabase, updateActivity as updateActivitySupabase } from '../lib/supabase';
@@ -156,19 +156,30 @@ export default function Itinerary() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <header className="mb-12 pt-16 pb-12 px-6 rounded-b-[2rem] hero-bg">
+    <div className="max-w-5xl mx-auto">
+      <header className="relative mb-12 mt-8 mx-6 h-64 rounded-[3rem] overflow-hidden flex flex-col justify-center px-12 shadow-sm border border-outline-variant/10">
+        <div className="absolute inset-0 z-0">
+          <img 
+            src="/images/background.png" 
+            alt="Itinerary Background" 
+            className="w-full h-full object-cover opacity-60 brightness-100"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />
+        </div>
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
           className="relative z-10"
         >
-          <h1 className="text-5xl font-extrabold tracking-tight text-primary mb-2 drop-shadow-sm font-headline">
+          <h1 className="text-6xl font-black tracking-tighter text-[#005c8d] mb-2 font-headline">
             Lịch Trình
           </h1>
-          <p className="text-secondary font-bold tracking-wide bg-surface/40 backdrop-blur-sm inline-block px-3 py-1 rounded-lg">
-            CHUYẾN ĐI VŨNG TÀU • 26/04 - 27/04
-          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-[#8b6e30] font-bold tracking-wider uppercase text-sm">
+              CHUYẾN ĐI VŨNG TÀU • 26/04 - 27/04
+            </span>
+          </div>
         </motion.div>
       </header>
 
@@ -359,82 +370,82 @@ interface DaySectionProps {
 function DaySection({ dayNumber, date, activities, onAdd, onEdit, onDelete }: DaySectionProps) {
   return (
     <section>
-      <div className="flex justify-between items-end mb-8">
+      <div className="flex justify-between items-center mb-10">
         <div>
-          <span className="text-xs font-bold text-tertiary uppercase tracking-widest bg-tertiary-fixed px-3 py-1 rounded-full">
-            Ngày 0{dayNumber}
+          <span className="text-[10px] font-black text-[#ff8c42] uppercase tracking-[0.2em] bg-[#ffead5] px-4 py-1.5 rounded-full">
+            NGÀY 0{dayNumber}
           </span>
-          <h2 className="text-3xl font-bold text-on-surface mt-2 font-headline">{date}</h2>
+          <h2 className="text-4xl font-black text-[#1c1c11] mt-4 font-headline tracking-tight">{date}</h2>
         </div>
         <button 
           onClick={onAdd}
-          className="flex items-center gap-2 bg-secondary-container text-on-secondary-container px-6 py-3 rounded-xl font-bold shadow-sm active:scale-95 transition-transform"
+          className="flex items-center gap-2 bg-[#ffdc2e] text-[#4a4a4a] px-8 py-4 rounded-[2rem] font-black shadow-xl hover:scale-105 active:scale-95 transition-all duration-300"
         >
-          <PlusCircle size={20} />
+          <PlusCircle size={24} />
           Thêm Hoạt Động
         </button>
       </div>
 
-      <div className="space-y-6">
+      <div className="space-y-8">
         {activities.map((activity, index) => (
           <motion.div
             key={activity.id}
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="group flex gap-6 bg-surface-container-low p-6 rounded-xl relative overflow-hidden transition-all duration-300 hover:shadow-[0_20px_40px_rgba(28,28,17,0.08)]"
+            className="group flex gap-8 bg-[#f5f5e9]/40 p-8 rounded-[2.5rem] relative overflow-hidden transition-all duration-500 hover:shadow-[0_32px_64px_rgba(28,28,17,0.06)] border border-outline-variant/10"
           >
-            <div className="w-24 shrink-0 text-center border-r border-outline-variant/30 pr-6">
-              <div className="text-2xl font-black text-primary">{activity.time}</div>
-              <div className="text-[10px] font-bold text-secondary uppercase tracking-tighter">{activity.period}</div>
+            <div className="w-32 shrink-0 text-center border-r-2 border-outline-variant/20 pr-8 flex flex-col justify-center">
+              <div className="text-3xl font-black text-[#005c8d] tracking-tighter leading-none">{activity.time}</div>
+              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mt-2">{activity.period}</div>
             </div>
             <div className="flex-grow">
-              <div className="flex justify-between items-start">
+              <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-xl font-bold text-on-surface mb-1 font-headline">{activity.title}</h3>
+                  <h3 className="text-2xl font-black text-[#1c1c11] mb-2 font-headline tracking-tight">{activity.title}</h3>
                   {activity.location_url ? (
                     <a 
                       href={activity.location_url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-primary hover:underline flex items-center gap-1 mb-3"
+                      className="text-[#005c8d] hover:underline flex items-center gap-1.5 font-bold text-sm"
                     >
-                      <MapPin size={14} />
+                      <MapPin size={16} />
                       {activity.location}
                     </a>
                   ) : (
-                    <p className="text-on-surface-variant flex items-center gap-1 mb-3">
-                      <MapPin size={14} />
+                    <p className="text-on-surface-variant flex items-center gap-1.5 font-bold text-sm">
+                      <MapPin size={16} />
                       {activity.location}
                     </p>
                   )}
                 </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-all duration-300">
                   <button 
                     onClick={() => onEdit(activity)}
-                    className="p-2 hover:bg-surface-container-high rounded-full text-secondary"
+                    className="p-3 bg-white/50 hover:bg-white rounded-2xl text-secondary transition-colors shadow-sm"
                   >
-                    <Edit2 size={18} />
+                    <Edit2 size={20} />
                   </button>
                   <button 
                     onClick={() => onDelete(activity.id)}
-                    className="p-2 hover:bg-red-100 rounded-full text-red-600"
+                    className="p-3 bg-red-50 hover:bg-red-100 rounded-2xl text-red-600 transition-colors shadow-sm"
                   >
-                    <Trash2 size={18} />
+                    <Trash2 size={20} />
                   </button>
                 </div>
               </div>
               {activity.imageUrl && (
-                <div className="rounded-xl overflow-hidden mb-4">
+                <div className="rounded-3xl overflow-hidden mb-6 shadow-md border border-white/20">
                   <img
                     src={activity.imageUrl}
                     alt={activity.title}
-                    className="w-full h-auto object-contain"
+                    className="w-full h-auto object-cover max-h-[500px]"
                     referrerPolicy="no-referrer"
                   />
                 </div>
               )}
-              <p className="text-on-surface-variant leading-relaxed">{activity.description}</p>
+              <p className="text-[#4a4a4a] leading-relaxed font-medium">{activity.description}</p>
             </div>
           </motion.div>
         ))}

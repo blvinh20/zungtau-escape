@@ -2,7 +2,8 @@ export interface Participant {
   id: string;
   name: string;
   initials: string;
-  colorClass: string;
+  color_class: string;
+  colorClass?: string;
 }
 
 export interface Activity {
@@ -19,12 +20,14 @@ export interface Activity {
 
 export interface Expense {
   id: string;
-  payer: string;
-  payerInitials: string;
+  payer_id: string;
   reason: string;
+  category: string;
   date: string;
   amount: number;
-  colorClass: string;
+  created_at: string;
+  participants?: Participant;
+  expense_participants?: { participant_id: string }[];
 }
 
 export interface Memory {

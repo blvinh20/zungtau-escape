@@ -1,19 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Wallet, Send, Plus, MoreVertical, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle } from 'lucide-react';
+import { Users, Wallet, Send, Plus, MoreVertical, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, MapPin, Clock, PiggyBank, Receipt } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Participant, Expense } from '../types';
-import { getParticipants, addParticipant as addParticipantSupabase, deleteParticipant as deleteParticipantSupabase, getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase } from '../lib/supabase';
+import { getParticipants, addParticipant as addParticipantSupabase, deleteParticipant as deleteParticipantSupabase, getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
 import { useToast } from './Toast';
+import FundContributionView from './FundContributionView';
+
+type ViewMode = 'dashboard' | 'fund';
 
 export default function Expenses() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [fundContributions, setFundContributions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const { showToast } = useToast();
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
+  const [isEndTripModalOpen, setIsEndTripModalOpen] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [newParticipantName, setNewParticipantName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -36,19 +42,23 @@ export default function Expenses() {
   const [expenseForm, setExpenseForm] = useState({
     payer_id: '',
     reason: '',
+    category: 'Ẩm thực',
     amount: '',
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toISOString().split('T')[0],
+    participant_ids: [] as string[]
   });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [pData, eData] = await Promise.all([
+        const [pData, eData, fData] = await Promise.all([
           getParticipants(),
-          getExpenses()
+          getExpenses(),
+          getFundContributions()
         ]);
         setParticipants(pData);
         setExpenses(eData);
+        setFundContributions(fData);
       } catch (error) {
         console.error('Error fetching data:', error);
       } finally {
@@ -58,9 +68,10 @@ export default function Expenses() {
     fetchData();
   }, []);
 
-  const total = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
+  const totalSpending = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
+  const totalFund = fundContributions.reduce((acc, curr) => acc + Number(curr.amount), 0);
+  const remainingFund = totalFund - totalSpending;
   const participantCount = participants.length || 1;
-  const perPerson = total / participantCount;
 
   const totalPages = Math.ceil(expenses.length / itemsPerPage);
   const paginatedExpenses = expenses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -95,20 +106,24 @@ export default function Expenses() {
       showToast('Vui lòng điền đầy đủ thông tin', 'error');
       return;
     }
+
+    // Default to all participants as requested
+    const allParticipantIds = participants.map(p => p.id);
     
     try {
       const payload = {
         payer_id: expenseForm.payer_id,
         reason: expenseForm.reason,
+        category: expenseForm.category,
         amount: Number(expenseForm.amount),
         date: expenseForm.date
       };
 
       if (editingExpenseId) {
-        await updateExpenseSupabase(editingExpenseId, payload);
+        await updateExpenseSupabase(editingExpenseId, payload, allParticipantIds);
         showToast('Cập nhật khoản chi thành công', 'success');
       } else {
-        await addExpenseSupabase(payload);
+        await addExpenseSupabase(payload, allParticipantIds);
         showToast('Thêm khoản chi thành công', 'success');
       }
       
@@ -128,8 +143,10 @@ export default function Expenses() {
     setExpenseForm({
       payer_id: expense.payer_id,
       reason: expense.reason,
+      category: expense.category || 'Ẩm thực',
       amount: expense.amount.toString(),
-      date: expense.date
+      date: expense.date,
+      participant_ids: (expense.expense_participants || []).map((p: any) => p.participant_id)
     });
     setIsAddExpenseModalOpen(true);
   };
@@ -140,8 +157,10 @@ export default function Expenses() {
     setExpenseForm({
       payer_id: '',
       reason: '',
+      category: 'Ẩm thực',
       amount: '',
-      date: new Date().toISOString().split('T')[0]
+      date: new Date().toISOString().split('T')[0],
+      participant_ids: []
     });
   };
 
@@ -178,6 +197,7 @@ export default function Expenses() {
           const updatedExpenses = await getExpenses();
           setExpenses(updatedExpenses);
           showToast('Xóa thành viên thành công', 'success');
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
         } catch (error) {
           console.error('Error removing participant:', error);
           showToast('Xóa thành viên thất bại', 'error');
@@ -186,53 +206,171 @@ export default function Expenses() {
     });
   };
 
+  const handleAddFundContribution = async (participantId: string, amount: number) => {
+    try {
+      await addFundContribution({
+        participant_id: participantId,
+        amount: amount
+      });
+      const updatedFunds = await getFundContributions();
+      setFundContributions(updatedFunds);
+      showToast('Đóng quỹ thành công', 'success');
+    } catch (error) {
+      console.error('Error adding fund contribution:', error);
+      showToast('Đóng quỹ thất bại', 'error');
+    }
+  };
+
+  if (viewMode === 'fund') {
+    return (
+      <FundContributionView 
+        participants={participants}
+        contributions={fundContributions}
+        onBack={() => setViewMode('dashboard')}
+        onAddContribution={handleAddFundContribution}
+      />
+    );
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8">
-      <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div>
-          <h1 className="text-5xl font-extrabold tracking-tight text-primary mb-2 font-headline">
-            Chi phí chuyến đi
-          </h1>
-          <p className="text-secondary font-medium">Theo dõi và phân bổ ngân sách cho nhóm {participantCount} người</p>
+    <div className="max-w-7xl mx-auto px-6 pt-12 pb-20">
+      <header className="mb-16">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-10">
+          <div>
+            <h1 className="text-7xl font-black tracking-tighter text-[#1c1c11] font-headline mb-4">
+              Quản lý Chi phí
+            </h1>
+            <div className="flex items-center gap-2 text-[#404751] font-medium">
+              <MapPin size={18} className="text-[#005e97]" />
+              <span>Hành trình: Nghỉ dưỡng biển Vũng Tàu 2024</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4">
+            <div className="bg-white px-8 py-6 rounded-[2.5rem] flex items-center gap-8 shadow-sm border border-outline-variant/10">
+              <div className="flex flex-col border-r border-outline-variant/20 pr-8">
+                <p className="text-[10px] uppercase font-bold text-secondary tracking-widest leading-none mb-3">THÀNH VIÊN</p>
+                <div className="flex items-center gap-3 group cursor-pointer relative">
+                  <div className="flex -space-x-3">
+                    {participants.slice(0, 3).map(p => (
+                      <div key={p.id} className={cn("w-10 h-10 rounded-full border-4 border-white flex items-center justify-center text-xs font-bold shadow-sm transition-transform group-hover:scale-110", p.colorClass || p.color_class)}>
+                        {p.initials}
+                      </div>
+                    ))}
+                    {participants.length > 3 && (
+                      <div className="w-10 h-10 rounded-full border-4 border-white bg-surface-container flex items-center justify-center text-xs font-bold text-secondary shadow-sm group-hover:scale-110">
+                        +{participants.length - 3}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-xs font-bold text-secondary opacity-60 whitespace-nowrap">{participants.length} thành viên tham gia</span>
+                  
+                  {/* Hover Tooltip for Members */}
+                  <div className="absolute top-full left-0 mt-4 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
+                    <div className="bg-white p-4 rounded-2xl shadow-2xl border border-outline-variant/10 min-w-[200px]">
+                      <p className="text-[10px] font-black uppercase text-primary mb-3 tracking-widest">Danh sách nhóm</p>
+                      <div className="space-y-2">
+                        {participants.map(p => (
+                          <div key={p.id} className="flex items-center gap-2">
+                            <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold", p.colorClass || p.color_class)}>
+                              {p.initials}
+                            </div>
+                            <span className="text-xs font-bold text-on-surface">{p.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsManageModalOpen(true)}
+                className="flex flex-col items-center gap-1 text-secondary hover:text-primary transition-colors group"
+              >
+                <div className="p-2 bg-surface-container-low rounded-xl group-hover:bg-primary/10 transition-colors">
+                  <UserPlus size={24} />
+                </div>
+                <span className="text-[10px] font-bold uppercase">Quản lý</span>
+              </button>
+            </div>
+          </div>
         </div>
-        <button 
-          onClick={() => setIsManageModalOpen(true)}
-          className="flex items-center gap-2 px-6 py-3 bg-secondary-container text-on-secondary-container font-bold rounded-xl shadow-sm hover:brightness-95 transition-all active:scale-95"
-        >
-          <Users size={20} />
-          Quản lý người tham gia
-        </button>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-16">
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="md:col-span-2 bg-surface-container-lowest p-8 rounded-3xl shadow-[0_12px_32px_rgba(28,28,17,0.04)] flex flex-col justify-center overflow-hidden relative group"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-[#f2f0df] p-10 rounded-[3rem] shadow-sm relative overflow-hidden group border border-outline-variant/10"
         >
-          <div className="z-10">
-            <h3 className="text-secondary uppercase tracking-widest text-xs font-bold mb-1">Tổng chi tiêu nhóm</h3>
-            <p className="text-7xl font-extrabold text-on-background tracking-tighter font-headline">
-              {total.toLocaleString('vi-VN')} <span className="text-2xl font-bold">đ</span>
+          <div className="relative z-10">
+            <h3 className="text-[#8b8b8b] text-[10px] font-bold uppercase tracking-widest mb-3">TỔNG NGÂN SÁCH</h3>
+            <p className="text-5xl font-black text-[#1c1c11] font-headline mb-8">
+              {totalFund.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
             </p>
+            <button 
+              onClick={() => setViewMode('fund')}
+              className="text-[#005e97] text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:underline"
+            >
+              XEM DANH SÁCH NỘP QUỸ <ChevronRight size={16} />
+            </button>
           </div>
-          <div className="absolute -right-10 -bottom-10 opacity-5 group-hover:opacity-10 transition-opacity">
-            <Wallet size={192} />
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 w-16 h-16 bg-[#005e97]/10 rounded-2xl flex items-center justify-center">
+            <Wallet size={32} className="text-[#005e97]" />
           </div>
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-primary bg-gradient-to-br from-primary to-primary-container p-8 rounded-3xl text-white shadow-xl flex flex-col justify-center items-center text-center"
+          className="bg-[#f2f0df] p-10 rounded-[3rem] shadow-sm relative overflow-hidden group border border-outline-variant/10"
         >
-          <h3 className="uppercase tracking-widest text-xs font-bold mb-4 opacity-80">Mỗi người cần đóng</h3>
-          <p className="text-4xl font-extrabold tracking-tight mb-2 font-headline">
-            {perPerson.toLocaleString('vi-VN')} đ
-          </p>
-          <div className="bg-white/20 px-4 py-2 rounded-full backdrop-blur-sm text-sm font-semibold">
-            Dựa trên {participantCount} thành viên
+          <div className="relative z-10">
+            <h3 className="text-[#8b8b8b] text-[10px] font-bold uppercase tracking-widest mb-3">THỰC CHI</h3>
+            <p className="text-5xl font-black text-[#005e97] font-headline mb-8">
+              {totalSpending.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
+            </p>
+            <div className="flex items-center gap-2">
+              <div className="bg-[#005e97] px-2 py-0.5 rounded text-[10px] font-black text-white uppercase tracking-widest">THỰC TẾ</div>
+              <span className="text-[10px] text-[#8b8b8b] font-bold uppercase tracking-widest">Cập nhật theo hóa đơn</span>
+            </div>
+          </div>
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 w-16 h-16 bg-[#005e97]/10 rounded-2xl flex items-center justify-center">
+            <Receipt size={32} className="text-[#005e97]" />
+          </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className={cn(
+            "p-10 rounded-[3rem] shadow-sm relative overflow-hidden group border-l-[12px] bg-[#f2f0df]",
+            remainingFund < 0 ? "border-red-500" : "border-[#8b7e3d]"
+          )}
+        >
+          <div className="relative z-10">
+            <h3 className="text-[#8b8b8b] text-[10px] font-bold uppercase tracking-widest mb-3">QUỸ CÒN LẠI</h3>
+            <p className={cn(
+              "text-5xl font-black font-headline mb-8",
+              remainingFund < 0 ? "text-red-600" : "text-[#8b7e3d]"
+            )}>
+              {remainingFund.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
+            </p>
+            <div className="w-full bg-[#e5e2d0] h-2 rounded-full mb-4 overflow-hidden">
+              <div 
+                className={cn("h-full rounded-full transition-all duration-1000 ease-out", remainingFund < 0 ? "bg-red-500" : "bg-[#8b7e3d]")}
+                style={{ width: `${Math.min(100, Math.max(0, (remainingFund / totalFund) * 100))}%` }}
+              />
+            </div>
+            <p className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-1", remainingFund < 0 ? "text-red-600" : "text-[#8b7e3d]")}>
+              <AlertTriangle size={12} />
+              {remainingFund < 0 ? 'CẢNH BÁO: VƯỢT QUỸ CHI TIÊU' : 'CẢNH BÁO: NGÂN SÁCH SẮP CẠN'}
+            </p>
+          </div>
+          <div className="absolute right-8 top-1/2 -translate-y-1/2 w-16 h-16 bg-[#8b7e3d]/10 rounded-2xl flex items-center justify-center">
+            <PiggyBank size={32} className="text-[#8b7e3d]" />
           </div>
         </motion.div>
       </div>
@@ -357,17 +495,33 @@ export default function Expenses() {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-secondary uppercase ml-1">Chi tiết chi</label>
-                  <div className="relative">
-                    <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" size={16} />
-                    <input 
-                      type="text" 
-                      placeholder="Ăn sáng, Tiền xăng..."
-                      value={expenseForm.reason}
-                      onChange={e => setExpenseForm({...expenseForm, reason: e.target.value})}
-                      className="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-primary"
-                    />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-secondary uppercase ml-1">Chi tiết chi</label>
+                    <div className="relative">
+                      <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" size={16} />
+                      <input 
+                        type="text" 
+                        placeholder="Ăn sáng, Tiền xăng..."
+                        value={expenseForm.reason}
+                        onChange={e => setExpenseForm({...expenseForm, reason: e.target.value})}
+                        className="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-secondary uppercase ml-1">Phân loại</label>
+                    <select 
+                      value={expenseForm.category}
+                      onChange={e => setExpenseForm({...expenseForm, category: e.target.value})}
+                      className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary"
+                    >
+                      <option value="Ẩm thực">Ẩm thực</option>
+                      <option value="Di chuyển">Di chuyển</option>
+                      <option value="Giải trí">Giải trí</option>
+                      <option value="Lưu trú">Lưu trú</option>
+                      <option value="Khác">Khác</option>
+                    </select>
                   </div>
                 </div>
 
@@ -424,97 +578,190 @@ export default function Expenses() {
           <p className="font-bold">Đang tải dữ liệu chi phí...</p>
         </div>
       ) : (
-        <section className="bg-surface-container-low rounded-[2rem] p-4 md:p-8">
-          <div className="flex justify-between items-center mb-8 px-4">
-            <h2 className="text-2xl font-bold font-headline">Danh sách khoản chi</h2>
-            <button 
-              onClick={() => setIsAddExpenseModalOpen(true)}
-              className="flex items-center gap-2 bg-primary text-white px-6 py-3 rounded-xl font-bold shadow-lg active:scale-95 transition-all"
-            >
-              <Plus size={20} />
-              Thêm khoản chi
-            </button>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full border-separate border-spacing-y-3">
-              <thead>
-                <tr className="text-secondary text-sm font-bold uppercase tracking-wider text-left">
-                  <th className="px-6 py-4">Người chi</th>
-                  <th className="px-6 py-4">Chi tiết</th>
-                  <th className="px-6 py-4">Thời gian</th>
-                  <th className="px-6 py-4 text-right">Số tiền</th>
-                  <th className="px-6 py-4"></th>
-                </tr>
-              </thead>
-              <tbody className="font-medium">
-                {paginatedExpenses.map((expense, index) => (
-                  <motion.tr
-                    key={expense.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="bg-surface-container-lowest rounded-2xl group hover:bg-white transition-colors shadow-sm"
-                  >
-                    <td className="px-6 py-5 rounded-l-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold", expense.participants?.color_class)}>
-                          {expense.participants?.initials}
-                        </div>
-                        <span>{expense.participants?.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-5">{expense.reason}</td>
-                    <td className="px-6 py-5 text-on-surface-variant text-sm">{expense.date}</td>
-                    <td className="px-6 py-5 text-right font-bold text-primary">
-                      {Number(expense.amount).toLocaleString('vi-VN')} đ
-                    </td>
-                    <td className="px-6 py-5 rounded-r-2xl text-right">
-                      <div className="flex gap-2 justify-end">
-                        <button 
-                          onClick={() => openEditExpenseModal(expense)}
-                          className="p-2 hover:bg-surface-container-high rounded-lg text-secondary transition-colors"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteExpense(expense.id)}
-                          className="p-2 hover:bg-red-100 rounded-lg text-red-500 transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-8 pt-8 border-t border-outline-variant/20 flex flex-col md:flex-row items-center justify-between text-sm text-secondary font-semibold gap-4">
-            <p>Hiển thị {paginatedExpenses.length} trên {expenses.length} khoản chi</p>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Trước
-              </button>
-              <div className="flex items-center px-4 bg-primary/10 text-primary rounded-lg font-bold">
-                Trang {currentPage} / {totalPages || 1}
+        <div className="space-y-12">
+          <section>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 px-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-surface-container-low rounded-2xl flex items-center justify-center">
+                  <Wallet size={24} className="text-secondary opacity-60" />
+                </div>
+                <div>
+                  <h2 className="text-3xl font-black font-headline text-[#1c1c11]">Danh sách khoản chi</h2>
+                  <p className="text-[10px] text-secondary font-bold uppercase tracking-widest mt-1">CẬP NHẬT: {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
               </div>
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages || totalPages === 0}
-                className="px-4 py-2 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Sau
-              </button>
+              <div className="flex gap-4">
+                <button 
+                  onClick={() => setIsAddExpenseModalOpen(true)}
+                  className="flex items-center gap-2 bg-[#005e97] text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-[#005e97]/20 hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <Plus size={20} />
+                  Thêm khoản chi
+                </button>
+                <button 
+                  onClick={() => setIsEndTripModalOpen(true)}
+                  className="flex items-center gap-2 bg-[#ffdc2e] text-[#4a4a4a] px-8 py-4 rounded-2xl font-black shadow-xl shadow-[#ffdc2e]/20 hover:brightness-110 active:scale-95 transition-all"
+                >
+                  <CheckCircle2 size={20} />
+                  Kết thúc hành trình
+                </button>
+              </div>
             </div>
-          </div>
-        </section>
+
+            <div className="bg-white rounded-[3rem] p-8 shadow-sm border border-outline-variant/10 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full border-separate border-spacing-y-4">
+                  <thead>
+                    <tr className="text-secondary text-[10px] font-bold uppercase tracking-widest text-left">
+                      <th className="px-6 pb-2">NGƯỜI CHI</th>
+                      <th className="px-6 pb-2">CHI TIẾT</th>
+                      <th className="px-6 pb-2">THỜI GIAN</th>
+                      <th className="px-6 pb-2 text-right">SỐ TIỀN</th>
+                      <th className="px-6 pb-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {paginatedExpenses.map((expense, index) => (
+                      <motion.tr
+                        key={expense.id}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="group hover:bg-surface-container-low transition-all duration-300"
+                      >
+                        <td className="px-6 py-5 rounded-l-[2rem] border-y border-l border-outline-variant/5">
+                          <div className="flex items-center gap-4">
+                            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", expense.participants?.color_class)}>
+                              {expense.participants?.initials}
+                            </div>
+                            <span className="text-base font-bold text-[#1c1c11]">{expense.participants?.name}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 border-y border-outline-variant/5">
+                          <p className="text-base font-bold text-[#1c1c11]">{expense.reason}</p>
+                          <p className="text-[10px] text-[#005e97] font-black uppercase tracking-widest">{expense.category || 'Ẩm thực'}</p>
+                        </td>
+                        <td className="px-6 py-5 border-y border-outline-variant/5 text-sm text-[#404751] font-medium italic">
+                          {new Date(expense.created_at).toLocaleString('vi-VN', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric' 
+                          }).replace(',', '')}
+                        </td>
+                        <td className="px-6 py-5 border-y border-outline-variant/5 text-right font-black text-[#005e97] text-xl">
+                          {Number(expense.amount).toLocaleString('vi-VN')}đ
+                        </td>
+                        <td className="px-6 py-5 rounded-r-[2rem] border-y border-r border-outline-variant/5 text-right">
+                          <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => openEditExpenseModal(expense)}
+                              className="p-3 hover:bg-[#005e97]/10 rounded-xl text-[#005e97] transition-all"
+                            >
+                              <Edit2 size={20} />
+                            </button>
+                            <button 
+                              onClick={() => handleDeleteExpense(expense.id)}
+                              className="p-3 hover:bg-red-100 rounded-xl text-red-500 transition-all"
+                            >
+                              <Trash2 size={20} />
+                            </button>
+                          </div>
+                        </td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex items-center justify-center gap-6 mt-10">
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="p-3 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
+                  >
+                    <ChevronLeft size={20} />
+                  </button>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-secondary uppercase tracking-widest">TRANG</span>
+                    <span className="text-sm font-black text-[#005e97]">{currentPage}</span>
+                    <span className="text-xs font-bold text-secondary">/</span>
+                    <span className="text-sm font-black text-secondary">{totalPages}</span>
+                  </div>
+                  <button 
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-3 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+              )}
+            </div>
+          </section>
+        </div>
       )}
+
+      {/* End Trip Confirmation Modal */}
+      <AnimatePresence>
+        {isEndTripModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsEndTripModalOpen(false)}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8"
+            >
+              <button 
+                onClick={() => setIsEndTripModalOpen(false)}
+                className="absolute right-6 top-6 p-2 hover:bg-surface-container rounded-full text-secondary transition-colors"
+              >
+                <X size={20} />
+              </button>
+
+              <div className="mb-6">
+                <div className="w-12 h-12 bg-[#ffcc00] rounded-xl flex items-center justify-center mb-6">
+                  <CheckCircle2 size={24} className="text-white" />
+                </div>
+                <h2 className="text-3xl font-black font-headline text-on-background mb-4 leading-tight">
+                  Xác nhận Kết thúc Hành trình
+                </h2>
+                <p className="text-secondary font-medium leading-relaxed">
+                  Chuyến đi của bạn đã hoàn thành? Hãy kiểm tra lại các khoản chi trước khi chốt quyết toán cuối cùng.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <button 
+                  onClick={() => {
+                    setIsEndTripModalOpen(false);
+                    showToast('Đã chốt quyết toán thành công!', 'success');
+                  }}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:brightness-95 active:scale-95 transition-all"
+                >
+                  Xác nhận & Chốt quyết toán 🚩
+                </button>
+                <button 
+                  onClick={() => setIsEndTripModalOpen(false)}
+                  className="w-full bg-[#ffcc00] text-on-background py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:brightness-95 active:scale-95 transition-all"
+                >
+                  <Tag size={18} />
+                  Xem bản Xem trước (Preview)
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
