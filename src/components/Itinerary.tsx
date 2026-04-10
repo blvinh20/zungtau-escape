@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { PlusCircle, MapPin, Edit2, Trash2, X, Clock, Image as ImageIcon, Loader2, AlertTriangle, Calendar } from 'lucide-react';
+import { PlusCircle, MapPin, Edit2, Trash2, X, Clock, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { Activity } from '../types';
 import { cn } from '../lib/utils';
 import { getActivities, addActivity as addActivitySupabase, deleteActivity as deleteActivitySupabase, updateActivity as updateActivitySupabase } from '../lib/supabase';
@@ -172,11 +172,11 @@ export default function Itinerary() {
           animate={{ opacity: 1, x: 0 }}
           className="relative z-10"
         >
-          <h1 className="text-6xl font-black tracking-tighter text-[#005c8d] mb-2 font-headline">
+          <h1 className="text-6xl font-black tracking-tighter text-primary mb-2 font-headline">
             Lịch Trình
           </h1>
           <div className="flex items-center gap-2">
-            <span className="text-[#8b6e30] font-bold tracking-wider uppercase text-sm">
+            <span className="text-secondary font-bold tracking-wider uppercase text-sm">
               CHUYẾN ĐI VŨNG TÀU • 26/04 - 27/04
             </span>
           </div>
@@ -375,11 +375,11 @@ function DaySection({ dayNumber, date, activities, onAdd, onEdit, onDelete }: Da
           <span className="text-[10px] font-black text-[#ff8c42] uppercase tracking-[0.2em] bg-[#ffead5] px-4 py-1.5 rounded-full">
             NGÀY 0{dayNumber}
           </span>
-          <h2 className="text-4xl font-black text-[#1c1c11] mt-4 font-headline tracking-tight">{date}</h2>
+          <h2 className="text-4xl font-black text-on-surface mt-4 font-headline tracking-tight">{date}</h2>
         </div>
         <button 
           onClick={onAdd}
-          className="flex items-center gap-2 bg-[#ffdc2e] text-[#4a4a4a] px-8 py-4 rounded-[2rem] font-black shadow-xl hover:scale-105 active:scale-95 transition-all duration-300"
+          className="flex items-center gap-2 bg-[#ffdc2e] text-on-surface-variant px-8 py-4 rounded-[2rem] font-black shadow-xl hover:scale-105 active:scale-95 transition-all duration-300"
         >
           <PlusCircle size={24} />
           Thêm Hoạt Động
@@ -396,19 +396,19 @@ function DaySection({ dayNumber, date, activities, onAdd, onEdit, onDelete }: Da
             className="group flex gap-8 bg-[#f5f5e9]/40 p-8 rounded-[2.5rem] relative overflow-hidden transition-all duration-500 hover:shadow-[0_32px_64px_rgba(28,28,17,0.06)] border border-outline-variant/10"
           >
             <div className="w-32 shrink-0 text-center border-r-2 border-outline-variant/20 pr-8 flex flex-col justify-center">
-              <div className="text-3xl font-black text-[#005c8d] tracking-tighter leading-none">{activity.time}</div>
+              <div className="text-3xl font-black text-primary tracking-tighter leading-none">{activity.time}</div>
               <div className="text-[10px] font-black text-secondary uppercase tracking-widest mt-2">{activity.period}</div>
             </div>
             <div className="flex-grow">
               <div className="flex justify-between items-start mb-4">
                 <div>
-                  <h3 className="text-2xl font-black text-[#1c1c11] mb-2 font-headline tracking-tight">{activity.title}</h3>
+                  <h3 className="text-2xl font-black text-on-surface mb-2 font-headline tracking-tight">{activity.title}</h3>
                   {activity.location_url ? (
                     <a 
                       href={activity.location_url} 
                       target="_blank" 
                       rel="noopener noreferrer"
-                      className="text-[#005c8d] hover:underline flex items-center gap-1.5 font-bold text-sm"
+                      className="text-primary hover:underline flex items-center gap-1.5 font-bold text-sm"
                     >
                       <MapPin size={16} />
                       {activity.location}
@@ -445,7 +445,7 @@ function DaySection({ dayNumber, date, activities, onAdd, onEdit, onDelete }: Da
                   />
                 </div>
               )}
-              <p className="text-[#4a4a4a] leading-relaxed font-medium">{activity.description}</p>
+              <p className="text-on-surface-variant leading-relaxed font-medium">{activity.description}</p>
             </div>
           </motion.div>
         ))}

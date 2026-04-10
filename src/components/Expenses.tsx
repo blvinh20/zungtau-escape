@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Users, Wallet, Send, Plus, MoreVertical, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, MapPin, Clock, PiggyBank, Receipt } from 'lucide-react';
+import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Participant, Expense } from '../types';
+import { Participant } from '../types';
 import { getParticipants, addParticipant as addParticipantSupabase, deleteParticipant as deleteParticipantSupabase, getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
 import { useToast } from './Toast';
@@ -23,8 +23,10 @@ export default function Expenses() {
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [newParticipantName, setNewParticipantName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-  
+  const [sortKey, setSortKey] = useState<'time' | 'name' | 'amount'>('time');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const itemsPerPage = 5;
+
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
     title: string;
@@ -35,10 +37,10 @@ export default function Expenses() {
     isOpen: false,
     title: '',
     message: '',
-    onConfirm: () => {},
+    onConfirm: () => { },
     type: 'danger'
   });
-  
+
   const [expenseForm, setExpenseForm] = useState({
     payer_id: '',
     reason: '',
@@ -71,10 +73,33 @@ export default function Expenses() {
   const totalSpending = expenses.reduce((acc, curr) => acc + Number(curr.amount), 0);
   const totalFund = fundContributions.reduce((acc, curr) => acc + Number(curr.amount), 0);
   const remainingFund = totalFund - totalSpending;
-  const participantCount = participants.length || 1;
 
-  const totalPages = Math.ceil(expenses.length / itemsPerPage);
-  const paginatedExpenses = expenses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const sortedExpenses = [...expenses].sort((a, b) => {
+    if (sortKey === 'time') {
+      const dateA = new Date(a.created_at).getTime();
+      const dateB = new Date(b.created_at).getTime();
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    } else if (sortKey === 'name') {
+      const nameA = a.participants?.name || '';
+      const nameB = b.participants?.name || '';
+      return sortOrder === 'desc' ? nameB.localeCompare(nameA) : nameA.localeCompare(nameB);
+    } else {
+      return sortOrder === 'desc' ? Number(b.amount) - Number(a.amount) : Number(a.amount) - Number(b.amount);
+    }
+  });
+
+  const totalPages = Math.ceil(sortedExpenses.length / itemsPerPage);
+  const paginatedExpenses = sortedExpenses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const toggleSort = (key: 'time' | 'name' | 'amount') => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortKey(key);
+      setSortOrder('desc');
+    }
+    setCurrentPage(1);
+  };
 
   const handleAddParticipant = async () => {
     if (!newParticipantName.trim()) return;
@@ -87,7 +112,7 @@ export default function Expenses() {
       'bg-purple-100 text-purple-700'
     ];
     const randomColor = colors[Math.floor(Math.random() * colors.length)];
-    
+
     try {
       const newP = await addParticipantSupabase({
         name: newParticipantName,
@@ -109,7 +134,7 @@ export default function Expenses() {
 
     // Default to all participants as requested
     const allParticipantIds = participants.map(p => p.id);
-    
+
     try {
       const payload = {
         payer_id: expenseForm.payer_id,
@@ -126,11 +151,11 @@ export default function Expenses() {
         await addExpenseSupabase(payload, allParticipantIds);
         showToast('Thêm khoản chi thành công', 'success');
       }
-      
+
       // Refresh expenses to get the joined participant data
       const updatedExpenses = await getExpenses();
       setExpenses(updatedExpenses);
-      
+
       closeExpenseModal();
     } catch (error) {
       console.error('Error saving expense:', error);
@@ -223,7 +248,7 @@ export default function Expenses() {
 
   if (viewMode === 'fund') {
     return (
-      <FundContributionView 
+      <FundContributionView
         participants={participants}
         contributions={fundContributions}
         onBack={() => setViewMode('dashboard')}
@@ -237,15 +262,10 @@ export default function Expenses() {
       <header className="mb-16">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-10">
           <div>
-            <h1 className="text-7xl font-black tracking-tighter text-[#1c1c11] font-headline mb-4">
-              Quản lý Chi phí
+            <h1 className="text-6xl font-black tracking-tighter text-on-surface font-headline mb-4">
+              Quản lý chi phí
             </h1>
-            <div className="flex items-center gap-2 text-[#404751] font-medium">
-              <MapPin size={18} className="text-[#005e97]" />
-              <span>Hành trình: Nghỉ dưỡng biển Vũng Tàu 2024</span>
-            </div>
           </div>
-          
           <div className="flex items-center gap-4">
             <div className="bg-white px-8 py-6 rounded-[2.5rem] flex items-center gap-8 shadow-sm border border-outline-variant/10">
               <div className="flex flex-col border-r border-outline-variant/20 pr-8">
@@ -264,7 +284,7 @@ export default function Expenses() {
                     )}
                   </div>
                   <span className="text-xs font-bold text-secondary opacity-60 whitespace-nowrap">{participants.length} thành viên tham gia</span>
-                  
+
                   {/* Hover Tooltip for Members */}
                   <div className="absolute top-full left-0 mt-4 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
                     <div className="bg-white p-4 rounded-2xl shadow-2xl border border-outline-variant/10 min-w-[200px]">
@@ -283,7 +303,7 @@ export default function Expenses() {
                   </div>
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setIsManageModalOpen(true)}
                 className="flex flex-col items-center gap-1 text-secondary hover:text-primary transition-colors group"
               >
@@ -301,77 +321,89 @@ export default function Expenses() {
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="bg-[#f2f0df] p-10 rounded-[3rem] shadow-sm relative overflow-hidden group border border-outline-variant/10"
+          whileHover={{ scale: 1.03, y: -4 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          className="bg-surface-container p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border border-outline-variant/10 cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
         >
-          <div className="relative z-10">
-            <h3 className="text-[#8b8b8b] text-[10px] font-bold uppercase tracking-widest mb-3">TỔNG NGÂN SÁCH</h3>
-            <p className="text-5xl font-black text-[#1c1c11] font-headline mb-8">
-              {totalFund.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
-            </p>
-            <button 
-              onClick={() => setViewMode('fund')}
-              className="text-[#005e97] text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:underline"
-            >
-              XEM DANH SÁCH NỘP QUỸ <ChevronRight size={16} />
-            </button>
-          </div>
-          <div className="absolute right-8 top-1/2 -translate-y-1/2 w-16 h-16 bg-[#005e97]/10 rounded-2xl flex items-center justify-center">
-            <Wallet size={32} className="text-[#005e97]" />
-          </div>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-[#f2f0df] p-10 rounded-[3rem] shadow-sm relative overflow-hidden group border border-outline-variant/10"
-        >
-          <div className="relative z-10">
-            <h3 className="text-[#8b8b8b] text-[10px] font-bold uppercase tracking-widest mb-3">THỰC CHI</h3>
-            <p className="text-5xl font-black text-[#005e97] font-headline mb-8">
-              {totalSpending.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
-            </p>
-            <div className="flex items-center gap-2">
-              <div className="bg-[#005e97] px-2 py-0.5 rounded text-[10px] font-black text-white uppercase tracking-widest">THỰC TẾ</div>
-              <span className="text-[10px] text-[#8b8b8b] font-bold uppercase tracking-widest">Cập nhật theo hóa đơn</span>
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <h3 className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">TỔNG NGÂN SÁCH</h3>
+            <div className="w-12 h-12 shrink-0 bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Wallet size={24} className="text-primary" />
             </div>
           </div>
-          <div className="absolute right-8 top-1/2 -translate-y-1/2 w-16 h-16 bg-[#005e97]/10 rounded-2xl flex items-center justify-center">
-            <Receipt size={32} className="text-[#005e97]" />
+          <p className="text-4xl font-black text-on-surface font-headline mb-6 whitespace-nowrap">
+            {totalFund.toLocaleString('vi-VN')} <span className="text-xl">đ</span>
+          </p>
+          <button
+            onClick={() => setViewMode('fund')}
+            className="text-primary text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:underline"
+          >
+            XEM DANH SÁCH NỘP QUỸ <ChevronRight size={16} />
+          </button>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          whileHover={{ scale: 1.03, y: -4 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
+          className="bg-surface-container p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border border-outline-variant/10 cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
+        >
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <h3 className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">THỰC CHI</h3>
+            <div className="w-12 h-12 shrink-0 bg-primary/10 rounded-2xl flex items-center justify-center">
+              <Receipt size={24} className="text-primary" />
+            </div>
+          </div>
+          <p className="text-4xl font-black text-primary font-headline mb-6 whitespace-nowrap">
+            {totalSpending.toLocaleString('vi-VN')} <span className="text-xl">đ</span>
+          </p>
+          <div className="flex items-center gap-2">
+            <div className="bg-primary px-2 py-0.5 rounded text-[10px] font-black text-white uppercase tracking-widest">THỰC TẾ</div>
+            <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest">Cập nhật theo hóa đơn</span>
           </div>
         </motion.div>
 
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+          whileHover={{ scale: 1.03, y: -4 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.2 }}
           className={cn(
-            "p-10 rounded-[3rem] shadow-sm relative overflow-hidden group border-l-[12px] bg-[#f2f0df]",
-            remainingFund < 0 ? "border-red-500" : "border-[#8b7e3d]"
+            "p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border-l-[12px] bg-surface-container cursor-pointer hover:shadow-xl transition-shadow duration-300",
+            remainingFund < 0 ? "border-red-500" : remainingFund > totalFund * 0.3 ? "border-emerald-500" : "border-[#8b7e3d]"
           )}
         >
-          <div className="relative z-10">
-            <h3 className="text-[#8b8b8b] text-[10px] font-bold uppercase tracking-widest mb-3">QUỸ CÒN LẠI</h3>
-            <p className={cn(
-              "text-5xl font-black font-headline mb-8",
-              remainingFund < 0 ? "text-red-600" : "text-[#8b7e3d]"
-            )}>
-              {remainingFund.toLocaleString('vi-VN')} <span className="text-2xl">đ</span>
-            </p>
-            <div className="w-full bg-[#e5e2d0] h-2 rounded-full mb-4 overflow-hidden">
-              <div 
-                className={cn("h-full rounded-full transition-all duration-1000 ease-out", remainingFund < 0 ? "bg-red-500" : "bg-[#8b7e3d]")}
-                style={{ width: `${Math.min(100, Math.max(0, (remainingFund / totalFund) * 100))}%` }}
-              />
+          <div className="flex items-start justify-between gap-4 mb-6">
+            <h3 className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">QUỸ CÒN LẠI</h3>
+            <div className={cn("w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center", remainingFund < 0 ? "bg-red-500/10" : remainingFund > totalFund * 0.3 ? "bg-emerald-500/10" : "bg-[#8b7e3d]/10")}>
+              <PiggyBank size={24} className={cn(remainingFund < 0 ? "text-red-600" : remainingFund > totalFund * 0.3 ? "text-emerald-600" : "text-[#8b7e3d]")} />
             </div>
-            <p className={cn("text-[10px] font-black uppercase tracking-widest flex items-center gap-1", remainingFund < 0 ? "text-red-600" : "text-[#8b7e3d]")}>
-              <AlertTriangle size={12} />
-              {remainingFund < 0 ? 'CẢNH BÁO: VƯỢT QUỸ CHI TIÊU' : 'CẢNH BÁO: NGÂN SÁCH SẮP CẠN'}
-            </p>
           </div>
-          <div className="absolute right-8 top-1/2 -translate-y-1/2 w-16 h-16 bg-[#8b7e3d]/10 rounded-2xl flex items-center justify-center">
-            <PiggyBank size={32} className="text-[#8b7e3d]" />
+          <p className={cn(
+            "text-4xl font-black font-headline mb-6 whitespace-nowrap",
+            remainingFund < 0 ? "text-red-600" : remainingFund > totalFund * 0.3 ? "text-emerald-600" : "text-[#8b7e3d]"
+          )}>
+            {remainingFund.toLocaleString('vi-VN')} <span className="text-xl">đ</span>
+          </p>
+          <div className="w-full bg-[#e5e2d0] h-2 rounded-full mb-4 overflow-hidden">
+            <div
+              className={cn("h-full rounded-full transition-all duration-1000 ease-out", remainingFund < 0 ? "bg-red-500" : remainingFund > totalFund * 0.3 ? "bg-emerald-500" : "bg-[#8b7e3d]")}
+              style={{ width: `${Math.min(100, Math.max(0, (remainingFund / totalFund) * 100))}%` }}
+            />
           </div>
+          <p className={cn(
+            "text-[10px] font-black uppercase tracking-widest flex items-center gap-1",
+            remainingFund < 0 ? "text-red-600" : remainingFund > totalFund * 0.3 ? "text-emerald-600" : "text-[#8b7e3d]"
+          )}>
+            {remainingFund < 0 ? (
+              <><AlertTriangle size={12} /> CẢNH BÁO: VƯỢT QUỸ CHI TIÊU</>
+            ) : remainingFund > totalFund * 0.3 ? (
+              <><CheckCircle2 size={12} /> NGÂN SÁCH CÒN DƯ</>
+            ) : (
+              <><AlertTriangle size={12} /> CẢNH BÁO: NGÂN SÁCH SẮP CẠN</>
+            )}
+          </p>
         </motion.div>
       </div>
 
@@ -379,35 +411,34 @@ export default function Expenses() {
       <AnimatePresence>
         {isManageModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsManageModalOpen(false)}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative bg-surface-container-lowest w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center">
-                <h2 className="text-xl font-bold font-headline">Quản lý người tham gia</h2>
                 <button onClick={() => setIsManageModalOpen(false)} className="p-2 hover:bg-surface-container rounded-full">
                   <X size={20} />
                 </button>
               </div>
               <div className="p-6 space-y-6">
                 <div className="flex gap-2">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={newParticipantName}
                     onChange={(e) => setNewParticipantName(e.target.value)}
                     placeholder="Tên thành viên mới..."
                     className="flex-grow bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary"
                   />
-                  <button 
+                  <button
                     onClick={handleAddParticipant}
                     className="bg-primary text-on-primary p-3 rounded-xl hover:opacity-90 active:scale-95 transition-all"
                   >
@@ -423,18 +454,18 @@ export default function Expenses() {
                         </div>
                         <span className="font-semibold">{p.name}</span>
                       </div>
-                      <button 
-                        onClick={() => handleRemoveParticipant(p.id)} 
-                        className="p-2 bg-red-50 text-red-500 hover:bg-red-100 rounded-lg transition-colors"
+                      <button
+                        onClick={() => handleRemoveParticipant(p.id)}
+                        className="p-3 hover:bg-red-100 rounded-xl text-red-500 transition-all"
                       >
-                        <X size={18} />
+                        <Trash2 size={20} />
                       </button>
                     </div>
                   ))}
                 </div>
               </div>
               <div className="p-6 bg-surface-container-low">
-                <button 
+                <button
                   onClick={() => setIsManageModalOpen(false)}
                   className="w-full bg-primary text-on-primary py-3 rounded-xl font-bold shadow-lg hover:opacity-90 active:scale-95 transition-all"
                 >
@@ -446,7 +477,7 @@ export default function Expenses() {
         )}
       </AnimatePresence>
 
-      <ConfirmModal 
+      <ConfirmModal
         isOpen={confirmConfig.isOpen}
         title={confirmConfig.title}
         message={confirmConfig.message}
@@ -459,14 +490,14 @@ export default function Expenses() {
       <AnimatePresence>
         {isAddExpenseModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsAddExpenseModalOpen(false)}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -483,9 +514,9 @@ export default function Expenses() {
               <div className="p-6 space-y-4">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-secondary uppercase ml-1">Người chi</label>
-                  <select 
+                  <select
                     value={expenseForm.payer_id}
-                    onChange={e => setExpenseForm({...expenseForm, payer_id: e.target.value})}
+                    onChange={e => setExpenseForm({ ...expenseForm, payer_id: e.target.value })}
                     className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary"
                   >
                     <option value="">Chọn thành viên...</option>
@@ -500,20 +531,20 @@ export default function Expenses() {
                     <label className="text-xs font-bold text-secondary uppercase ml-1">Chi tiết chi</label>
                     <div className="relative">
                       <Tag className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" size={16} />
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         placeholder="Ăn sáng, Tiền xăng..."
                         value={expenseForm.reason}
-                        onChange={e => setExpenseForm({...expenseForm, reason: e.target.value})}
+                        onChange={e => setExpenseForm({ ...expenseForm, reason: e.target.value })}
                         className="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-primary"
                       />
                     </div>
                   </div>
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-secondary uppercase ml-1">Phân loại</label>
-                    <select 
+                    <select
                       value={expenseForm.category}
-                      onChange={e => setExpenseForm({...expenseForm, category: e.target.value})}
+                      onChange={e => setExpenseForm({ ...expenseForm, category: e.target.value })}
                       className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary"
                     >
                       <option value="Ẩm thực">Ẩm thực</option>
@@ -530,11 +561,11 @@ export default function Expenses() {
                     <label className="text-xs font-bold text-secondary uppercase ml-1">Số tiền</label>
                     <div className="relative">
                       <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" size={16} />
-                      <input 
-                        type="number" 
+                      <input
+                        type="number"
                         placeholder="500000"
                         value={expenseForm.amount}
-                        onChange={e => setExpenseForm({...expenseForm, amount: e.target.value})}
+                        onChange={e => setExpenseForm({ ...expenseForm, amount: e.target.value })}
                         className="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-primary"
                       />
                     </div>
@@ -543,10 +574,10 @@ export default function Expenses() {
                     <label className="text-xs font-bold text-secondary uppercase ml-1">Ngày chi</label>
                     <div className="relative">
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant" size={16} />
-                      <input 
-                        type="date" 
+                      <input
+                        type="date"
                         value={expenseForm.date}
-                        onChange={e => setExpenseForm({...expenseForm, date: e.target.value})}
+                        onChange={e => setExpenseForm({ ...expenseForm, date: e.target.value })}
                         className="w-full bg-surface-container-low border-none rounded-xl pl-10 pr-4 py-3 focus:ring-2 focus:ring-primary"
                       />
                     </div>
@@ -554,13 +585,13 @@ export default function Expenses() {
                 </div>
               </div>
               <div className="p-6 bg-surface-container-low flex gap-3">
-                <button 
+                <button
                   onClick={closeExpenseModal}
                   className="flex-1 px-6 py-3 rounded-xl font-bold text-on-surface-variant hover:bg-surface-container transition-all"
                 >
                   Hủy
                 </button>
-                <button 
+                <button
                   onClick={handleSaveExpense}
                   className="flex-1 bg-primary text-on-primary px-6 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 active:scale-95 transition-all"
                 >
@@ -586,21 +617,50 @@ export default function Expenses() {
                   <Wallet size={24} className="text-secondary opacity-60" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-black font-headline text-[#1c1c11]">Danh sách khoản chi</h2>
+                  <h2 className="text-3xl font-black font-headline text-on-surface">Danh sách khoản chi</h2>
                   <p className="text-[10px] text-secondary font-bold uppercase tracking-widest mt-1">CẬP NHẬT: {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
               </div>
-              <div className="flex gap-4">
-                <button 
+              <div className="flex items-center gap-4">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => toggleSort('name')}
+                    className={cn(
+                      "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                      sortKey === 'name' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
+                    )}
+                  >
+                    Tên <ArrowUpDown size={14} />
+                  </button>
+                  <button
+                    onClick={() => toggleSort('time')}
+                    className={cn(
+                      "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                      sortKey === 'time' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
+                    )}
+                  >
+                    Thời gian <ArrowUpDown size={14} />
+                  </button>
+                  <button
+                    onClick={() => toggleSort('amount')}
+                    className={cn(
+                      "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                      sortKey === 'amount' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
+                    )}
+                  >
+                    Số tiền <ArrowUpDown size={14} />
+                  </button>
+                </div>
+                <button
                   onClick={() => setIsAddExpenseModalOpen(true)}
-                  className="flex items-center gap-2 bg-[#005e97] text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-[#005e97]/20 hover:brightness-110 active:scale-95 transition-all"
+                  className="flex items-center gap-2 bg-primary text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
                 >
                   <Plus size={20} />
                   Thêm khoản chi
                 </button>
-                <button 
+                <button
                   onClick={() => setIsEndTripModalOpen(true)}
-                  className="flex items-center gap-2 bg-[#ffdc2e] text-[#4a4a4a] px-8 py-4 rounded-2xl font-black shadow-xl shadow-[#ffdc2e]/20 hover:brightness-110 active:scale-95 transition-all"
+                  className="flex items-center gap-2 bg-[#ffdc2e] text-on-surface-variant px-8 py-4 rounded-2xl font-black shadow-xl shadow-[#ffdc2e]/20 hover:brightness-110 active:scale-95 transition-all"
                 >
                   <CheckCircle2 size={20} />
                   Kết thúc hành trình
@@ -634,34 +694,34 @@ export default function Expenses() {
                             <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", expense.participants?.color_class)}>
                               {expense.participants?.initials}
                             </div>
-                            <span className="text-base font-bold text-[#1c1c11]">{expense.participants?.name}</span>
+                            <span className="text-base font-bold text-on-surface">{expense.participants?.name}</span>
                           </div>
                         </td>
                         <td className="px-6 py-5 border-y border-outline-variant/5">
-                          <p className="text-base font-bold text-[#1c1c11]">{expense.reason}</p>
-                          <p className="text-[10px] text-[#005e97] font-black uppercase tracking-widest">{expense.category || 'Ẩm thực'}</p>
+                          <p className="text-base font-bold text-on-surface">{expense.reason}</p>
+                          <p className="text-[10px] text-primary font-black uppercase tracking-widest">{expense.category || 'Ẩm thực'}</p>
                         </td>
-                        <td className="px-6 py-5 border-y border-outline-variant/5 text-sm text-[#404751] font-medium italic">
-                          {new Date(expense.created_at).toLocaleString('vi-VN', { 
-                            hour: '2-digit', 
+                        <td className="px-6 py-5 border-y border-outline-variant/5 text-sm text-on-surface-variant font-medium italic">
+                          {new Date(expense.created_at).toLocaleString('vi-VN', {
+                            hour: '2-digit',
                             minute: '2-digit',
-                            day: '2-digit', 
-                            month: '2-digit', 
-                            year: 'numeric' 
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric'
                           }).replace(',', '')}
                         </td>
-                        <td className="px-6 py-5 border-y border-outline-variant/5 text-right font-black text-[#005e97] text-xl">
+                        <td className="px-6 py-5 border-y border-outline-variant/5 text-right font-black text-primary text-xl">
                           {Number(expense.amount).toLocaleString('vi-VN')}đ
                         </td>
                         <td className="px-6 py-5 rounded-r-[2rem] border-y border-r border-outline-variant/5 text-right">
                           <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
+                            <button
                               onClick={() => openEditExpenseModal(expense)}
-                              className="p-3 hover:bg-[#005e97]/10 rounded-xl text-[#005e97] transition-all"
+                              className="p-3 hover:bg-primary/10 rounded-xl text-primary transition-all"
                             >
                               <Edit2 size={20} />
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDeleteExpense(expense.id)}
                               className="p-3 hover:bg-red-100 rounded-xl text-red-500 transition-all"
                             >
@@ -677,7 +737,7 @@ export default function Expenses() {
 
               {totalPages > 1 && (
                 <div className="flex items-center justify-center gap-6 mt-10">
-                  <button 
+                  <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
                     className="p-3 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
@@ -686,11 +746,11 @@ export default function Expenses() {
                   </button>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-secondary uppercase tracking-widest">TRANG</span>
-                    <span className="text-sm font-black text-[#005e97]">{currentPage}</span>
+                    <span className="text-sm font-black text-primary">{currentPage}</span>
                     <span className="text-xs font-bold text-secondary">/</span>
                     <span className="text-sm font-black text-secondary">{totalPages}</span>
                   </div>
-                  <button 
+                  <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
                     className="p-3 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
@@ -708,20 +768,20 @@ export default function Expenses() {
       <AnimatePresence>
         {isEndTripModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsEndTripModalOpen(false)}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
               className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8"
             >
-              <button 
+              <button
                 onClick={() => setIsEndTripModalOpen(false)}
                 className="absolute right-6 top-6 p-2 hover:bg-surface-container rounded-full text-secondary transition-colors"
               >
@@ -741,7 +801,7 @@ export default function Expenses() {
               </div>
 
               <div className="space-y-3">
-                <button 
+                <button
                   onClick={() => {
                     setIsEndTripModalOpen(false);
                     showToast('Đã chốt quyết toán thành công!', 'success');
@@ -750,7 +810,7 @@ export default function Expenses() {
                 >
                   Xác nhận & Chốt quyết toán 🚩
                 </button>
-                <button 
+                <button
                   onClick={() => setIsEndTripModalOpen(false)}
                   className="w-full bg-[#ffcc00] text-on-background py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:brightness-95 active:scale-95 transition-all"
                 >

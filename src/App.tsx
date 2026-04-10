@@ -13,9 +13,9 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Navigate to="/itinerary" replace />} />
-            <Route path="Itinerary" element={<Itinerary />} />
-            <Route path="Expenses" element={<Expenses />} />
-            <Route path="Memories" element={<Memories />} />
+            <Route path="itinerary" element={<Itinerary />} />
+            <Route path="expenses" element={<Expenses />} />
+            <Route path="memories" element={<Memories />} />
           </Route>
         </Routes>
       </BrowserRouter>

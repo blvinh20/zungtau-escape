@@ -120,7 +120,7 @@ export default function Memories() {
     <div className="max-w-7xl mx-auto px-6 pt-8">
       <header className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="max-w-2xl">
-          <h1 className="text-5xl font-extrabold tracking-tight text-primary mb-4 font-headline">
+          <h1 className="text-6xl font-black tracking-tighter text-primary mb-4 font-headline">
             Tường Kỷ Niệm
           </h1>
           <p className="text-lg text-on-surface-variant leading-relaxed">
