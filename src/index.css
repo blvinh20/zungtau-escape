@@ -47,6 +47,21 @@
   scrollbar-width: none;
 }
 
+/* Fix select dropdown being clipped inside rounded/overflow-hidden modals */
+select {
+  position: relative;
+  z-index: 1;
+  appearance: auto;
+}
+select:focus {
+  z-index: 50;
+}
+select option {
+  background: white;
+  color: #1c1c11;
+  padding: 8px;
+}
+
 .breeze-mask {
   border-top-left-radius: 1.5rem;
 }

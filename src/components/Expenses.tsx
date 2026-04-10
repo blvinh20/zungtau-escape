@@ -1,31 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown } from 'lucide-react';
+import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown, Flag, Eye, Camera } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { Participant } from '../types';
-import { getParticipants, addParticipant as addParticipantSupabase, deleteParticipant as deleteParticipantSupabase, getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution } from '../lib/supabase';
+import { getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution, deleteFundContribution } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
 import { useToast } from './Toast';
-import FundContributionView from './FundContributionView';
-
-type ViewMode = 'dashboard' | 'fund';
+import { useParticipants } from './ParticipantContext';
 
 export default function Expenses() {
-  const [participants, setParticipants] = useState<Participant[]>([]);
+  const { participants } = useParticipants();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [fundContributions, setFundContributions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const { showToast } = useToast();
-  const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [isEndTripModalOpen, setIsEndTripModalOpen] = useState(false);
+  const [isFundModalOpen, setIsFundModalOpen] = useState(false);
+  const [isFundAddOpen, setIsFundAddOpen] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
-  const [newParticipantName, setNewParticipantName] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<'time' | 'name' | 'amount'>('time');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const itemsPerPage = 5;
+
+  // Fund modal state
+  const [fundSelectedParticipants, setFundSelectedParticipants] = useState<string[]>([]);
+  const [fundAmount, setFundAmount] = useState('500000');
+  const [fundSortKey, setFundSortKey] = useState<'time' | 'name' | 'amount'>('time');
+  const [fundSortOrder, setFundSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [fundCurrentPage, setFundCurrentPage] = useState(1);
+  const fundItemsPerPage = 5;
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -53,12 +57,10 @@ export default function Expenses() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [pData, eData, fData] = await Promise.all([
-          getParticipants(),
+        const [eData, fData] = await Promise.all([
           getExpenses(),
           getFundContributions()
         ]);
-        setParticipants(pData);
         setExpenses(eData);
         setFundContributions(fData);
       } catch (error) {
@@ -99,31 +101,6 @@ export default function Expenses() {
       setSortOrder('desc');
     }
     setCurrentPage(1);
-  };
-
-  const handleAddParticipant = async () => {
-    if (!newParticipantName.trim()) return;
-    const initials = newParticipantName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
-    const colors = [
-      'bg-primary-fixed text-primary',
-      'bg-secondary-fixed text-on-secondary-fixed',
-      'bg-tertiary-fixed text-on-tertiary-fixed',
-      'bg-blue-100 text-blue-700',
-      'bg-purple-100 text-purple-700'
-    ];
-    const randomColor = colors[Math.floor(Math.random() * colors.length)];
-
-    try {
-      const newP = await addParticipantSupabase({
-        name: newParticipantName,
-        initials,
-        color_class: randomColor || 'bg-gray-100 text-gray-700'
-      });
-      setParticipants([...participants, { ...newP, colorClass: newP.color_class }]);
-      setNewParticipantName('');
-    } catch (error) {
-      console.error('Error adding participant:', error);
-    }
   };
 
   const handleSaveExpense = async () => {
@@ -208,29 +185,6 @@ export default function Expenses() {
     });
   };
 
-  const handleRemoveParticipant = async (id: string) => {
-    setConfirmConfig({
-      isOpen: true,
-      title: 'Xóa thành viên',
-      message: 'Xóa thành viên này sẽ xóa tất cả các khoản chi liên quan. Bạn có chắc chắn muốn tiếp tục?',
-      type: 'danger',
-      onConfirm: async () => {
-        try {
-          await deleteParticipantSupabase(id);
-          setParticipants(participants.filter(p => p.id !== id));
-          // Also refresh expenses since they might have been deleted by cascade
-          const updatedExpenses = await getExpenses();
-          setExpenses(updatedExpenses);
-          showToast('Xóa thành viên thành công', 'success');
-          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
-        } catch (error) {
-          console.error('Error removing participant:', error);
-          showToast('Xóa thành viên thất bại', 'error');
-        }
-      }
-    });
-  };
-
   const handleAddFundContribution = async (participantId: string, amount: number) => {
     try {
       await addFundContribution({
@@ -246,73 +200,114 @@ export default function Expenses() {
     }
   };
 
-  if (viewMode === 'fund') {
-    return (
-      <FundContributionView
-        participants={participants}
-        contributions={fundContributions}
-        onBack={() => setViewMode('dashboard')}
-        onAddContribution={handleAddFundContribution}
-      />
+  const handleDeleteFundContribution = async (id: string) => {
+    setConfirmConfig({
+      isOpen: true,
+      title: 'Xóa khoản nộp quỹ',
+      message: 'Bạn có chắc chắn muốn xóa khoản nộp quỹ này?',
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await deleteFundContribution(id);
+          setFundContributions(fundContributions.filter(c => c.id !== id));
+          showToast('Xóa khoản nộp quỹ thành công', 'success');
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (error) {
+          console.error('Error deleting fund contribution:', error);
+          showToast('Xóa khoản nộp quỹ thất bại', 'error');
+        }
+      }
+    });
+  };
+
+  const toggleFundParticipant = (id: string) => {
+    setFundSelectedParticipants(prev =>
+      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
     );
-  }
+  };
+
+  const toggleAllFundParticipants = () => {
+    if (fundSelectedParticipants.length === participants.length) {
+      setFundSelectedParticipants([]);
+    } else {
+      setFundSelectedParticipants(participants.map(p => p.id));
+    }
+  };
+
+  const handleFundConfirm = async () => {
+    if (fundSelectedParticipants.length === 0 || !fundAmount) return;
+    try {
+      for (const pid of fundSelectedParticipants) {
+        await addFundContribution({
+          participant_id: pid,
+          amount: Number(fundAmount)
+        });
+      }
+      const updatedFunds = await getFundContributions();
+      setFundContributions(updatedFunds);
+      showToast(
+        `Đóng quỹ thành công cho ${fundSelectedParticipants.length} thành viên (${(Number(fundAmount) * fundSelectedParticipants.length).toLocaleString('vi-VN')}đ)`,
+        'success'
+      );
+      setFundSelectedParticipants([]);
+      setIsFundAddOpen(false);
+    } catch (error) {
+      console.error('Error adding fund contributions:', error);
+      showToast('Đóng quỹ thất bại', 'error');
+    }
+  };
+
+  const sortedFundContributions = [...fundContributions].sort((a, b) => {
+    if (fundSortKey === 'time') {
+      return fundSortOrder === 'desc'
+        ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+    } else if (fundSortKey === 'amount') {
+      return fundSortOrder === 'desc'
+        ? Number(b.amount) - Number(a.amount)
+        : Number(a.amount) - Number(b.amount);
+    }
+    const nameA = a.participants?.name || '';
+    const nameB = b.participants?.name || '';
+    return fundSortOrder === 'desc' ? nameB.localeCompare(nameA) : nameA.localeCompare(nameB);
+  });
+
+  const fundTotalPages = Math.ceil(sortedFundContributions.length / fundItemsPerPage);
+  const paginatedFundContributions = sortedFundContributions.slice(
+    (fundCurrentPage - 1) * fundItemsPerPage,
+    fundCurrentPage * fundItemsPerPage
+  );
+
+  const toggleFundSort = (key: 'time' | 'name' | 'amount') => {
+    if (fundSortKey === key) {
+      setFundSortOrder(fundSortOrder === 'desc' ? 'asc' : 'desc');
+    } else {
+      setFundSortKey(key);
+      setFundSortOrder('desc');
+    }
+    setFundCurrentPage(1);
+  };
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-12 pb-20">
-      <header className="mb-16">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-10">
+      <header className="relative mb-16 h-72 rounded-[3rem] overflow-visible flex flex-col justify-center px-12 shadow-sm border border-outline-variant/10">
+        <div className="absolute inset-0 z-0 overflow-hidden rounded-[3rem]">
+          <img
+            src="/images/background.png"
+            alt="Expenses Background"
+            className="w-full h-full object-cover opacity-50"
+            referrerPolicy="no-referrer"
+          />
+          <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />
+        </div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div>
-            <h1 className="text-6xl font-black tracking-tighter text-on-surface font-headline mb-4">
+            <h1 className="text-6xl font-black tracking-tighter text-primary font-headline mb-3">
               Quản lý chi phí
             </h1>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="bg-white px-8 py-6 rounded-[2.5rem] flex items-center gap-8 shadow-sm border border-outline-variant/10">
-              <div className="flex flex-col border-r border-outline-variant/20 pr-8">
-                <p className="text-[10px] uppercase font-bold text-secondary tracking-widest leading-none mb-3">THÀNH VIÊN</p>
-                <div className="flex items-center gap-3 group cursor-pointer relative">
-                  <div className="flex -space-x-3">
-                    {participants.slice(0, 3).map(p => (
-                      <div key={p.id} className={cn("w-10 h-10 rounded-full border-4 border-white flex items-center justify-center text-xs font-bold shadow-sm transition-transform group-hover:scale-110", p.colorClass || p.color_class)}>
-                        {p.initials}
-                      </div>
-                    ))}
-                    {participants.length > 3 && (
-                      <div className="w-10 h-10 rounded-full border-4 border-white bg-surface-container flex items-center justify-center text-xs font-bold text-secondary shadow-sm group-hover:scale-110">
-                        +{participants.length - 3}
-                      </div>
-                    )}
-                  </div>
-                  <span className="text-xs font-bold text-secondary opacity-60 whitespace-nowrap">{participants.length} thành viên tham gia</span>
-
-                  {/* Hover Tooltip for Members */}
-                  <div className="absolute top-full left-0 mt-4 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-50">
-                    <div className="bg-white p-4 rounded-2xl shadow-2xl border border-outline-variant/10 min-w-[200px]">
-                      <p className="text-[10px] font-black uppercase text-primary mb-3 tracking-widest">Danh sách nhóm</p>
-                      <div className="space-y-2">
-                        {participants.map(p => (
-                          <div key={p.id} className="flex items-center gap-2">
-                            <div className={cn("w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold", p.colorClass || p.color_class)}>
-                              {p.initials}
-                            </div>
-                            <span className="text-xs font-bold text-on-surface">{p.name}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsManageModalOpen(true)}
-                className="flex flex-col items-center gap-1 text-secondary hover:text-primary transition-colors group"
-              >
-                <div className="p-2 bg-surface-container-low rounded-xl group-hover:bg-primary/10 transition-colors">
-                  <UserPlus size={24} />
-                </div>
-                <span className="text-[10px] font-bold uppercase">Quản lý</span>
-              </button>
-            </div>
+            <p className="text-on-surface-variant max-w-md leading-relaxed">
+              Theo dõi và quản lý dòng tiền của chuyến đi Vũng Tàu một cách minh bạch và chuyên nghiệp.
+            </p>
           </div>
         </div>
       </header>
@@ -326,7 +321,7 @@ export default function Expenses() {
           className="bg-surface-container p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border border-outline-variant/10 cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
         >
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">TỔNG NGÂN SÁCH</h3>
+            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest">TỔNG NGÂN SÁCH</h3>
             <div className="w-12 h-12 shrink-0 bg-primary/10 rounded-2xl flex items-center justify-center">
               <Wallet size={24} className="text-primary" />
             </div>
@@ -335,7 +330,7 @@ export default function Expenses() {
             {totalFund.toLocaleString('vi-VN')} <span className="text-xl">đ</span>
           </p>
           <button
-            onClick={() => setViewMode('fund')}
+            onClick={() => setIsFundModalOpen(true)}
             className="text-primary text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:underline"
           >
             XEM DANH SÁCH NỘP QUỸ <ChevronRight size={16} />
@@ -350,7 +345,7 @@ export default function Expenses() {
           className="bg-surface-container p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border border-outline-variant/10 cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
         >
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">THỰC CHI</h3>
+            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest">THỰC CHI</h3>
             <div className="w-12 h-12 shrink-0 bg-primary/10 rounded-2xl flex items-center justify-center">
               <Receipt size={24} className="text-primary" />
             </div>
@@ -360,7 +355,7 @@ export default function Expenses() {
           </p>
           <div className="flex items-center gap-2">
             <div className="bg-primary px-2 py-0.5 rounded text-[10px] font-black text-white uppercase tracking-widest">THỰC TẾ</div>
-            <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest">Cập nhật theo hóa đơn</span>
+            <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest">Cập nhật theo khoản chi</span>
           </div>
         </motion.div>
 
@@ -375,7 +370,7 @@ export default function Expenses() {
           )}
         >
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="text-on-surface-variant text-[10px] font-bold uppercase tracking-widest">QUỸ CÒN LẠI</h3>
+            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest">QUỸ CÒN LẠI</h3>
             <div className={cn("w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center", remainingFund < 0 ? "bg-red-500/10" : remainingFund > totalFund * 0.3 ? "bg-emerald-500/10" : "bg-[#8b7e3d]/10")}>
               <PiggyBank size={24} className={cn(remainingFund < 0 ? "text-red-600" : remainingFund > totalFund * 0.3 ? "text-emerald-600" : "text-[#8b7e3d]")} />
             </div>
@@ -406,76 +401,6 @@ export default function Expenses() {
           </p>
         </motion.div>
       </div>
-
-      {/* Participant Management Modal */}
-      <AnimatePresence>
-        {isManageModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsManageModalOpen(false)}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-surface-container-lowest w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
-            >
-              <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center">
-                <button onClick={() => setIsManageModalOpen(false)} className="p-2 hover:bg-surface-container rounded-full">
-                  <X size={20} />
-                </button>
-              </div>
-              <div className="p-6 space-y-6">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={newParticipantName}
-                    onChange={(e) => setNewParticipantName(e.target.value)}
-                    placeholder="Tên thành viên mới..."
-                    className="flex-grow bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary"
-                  />
-                  <button
-                    onClick={handleAddParticipant}
-                    className="bg-primary text-on-primary p-3 rounded-xl hover:opacity-90 active:scale-95 transition-all"
-                  >
-                    <UserPlus size={20} />
-                  </button>
-                </div>
-                <div className="space-y-3 max-h-60 overflow-y-auto pr-2 scrollbar-hide">
-                  {participants.map(p => (
-                    <div key={p.id} className="flex items-center justify-between bg-surface-container-low p-3 rounded-2xl">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold", p.colorClass || p.color_class)}>
-                          {p.initials}
-                        </div>
-                        <span className="font-semibold">{p.name}</span>
-                      </div>
-                      <button
-                        onClick={() => handleRemoveParticipant(p.id)}
-                        className="p-3 hover:bg-red-100 rounded-xl text-red-500 transition-all"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="p-6 bg-surface-container-low">
-                <button
-                  onClick={() => setIsManageModalOpen(false)}
-                  className="w-full bg-primary text-on-primary py-3 rounded-xl font-bold shadow-lg hover:opacity-90 active:scale-95 transition-all"
-                >
-                  Xong
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       <ConfirmModal
         isOpen={confirmConfig.isOpen}
@@ -587,7 +512,7 @@ export default function Expenses() {
               <div className="p-6 bg-surface-container-low flex gap-3">
                 <button
                   onClick={closeExpenseModal}
-                  className="flex-1 px-6 py-3 rounded-xl font-bold text-on-surface-variant hover:bg-surface-container transition-all"
+                  className="flex-1 bg-primary text-on-primary px-6 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 active:scale-95 transition-all"
                 >
                   Hủy
                 </button>
@@ -622,35 +547,6 @@ export default function Expenses() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => toggleSort('name')}
-                    className={cn(
-                      "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                      sortKey === 'name' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
-                    )}
-                  >
-                    Tên <ArrowUpDown size={14} />
-                  </button>
-                  <button
-                    onClick={() => toggleSort('time')}
-                    className={cn(
-                      "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                      sortKey === 'time' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
-                    )}
-                  >
-                    Thời gian <ArrowUpDown size={14} />
-                  </button>
-                  <button
-                    onClick={() => toggleSort('amount')}
-                    className={cn(
-                      "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
-                      sortKey === 'amount' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
-                    )}
-                  >
-                    Số tiền <ArrowUpDown size={14} />
-                  </button>
-                </div>
                 <button
                   onClick={() => setIsAddExpenseModalOpen(true)}
                   className="flex items-center gap-2 bg-primary text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
@@ -673,10 +569,40 @@ export default function Expenses() {
                 <table className="w-full border-separate border-spacing-y-4">
                   <thead>
                     <tr className="text-secondary text-[10px] font-bold uppercase tracking-widest text-left">
-                      <th className="px-6 pb-2">NGƯỜI CHI</th>
+                      <th className="px-6 pb-2">
+                        <button
+                          onClick={() => toggleSort('name')}
+                          className={cn(
+                            "flex items-center gap-1 hover:text-primary transition-colors",
+                            sortKey === 'name' && "text-primary"
+                          )}
+                        >
+                          NGƯỜI CHI <ArrowUpDown size={12} className={sortKey === 'name' ? "text-primary" : "opacity-40"} />
+                        </button>
+                      </th>
                       <th className="px-6 pb-2">CHI TIẾT</th>
-                      <th className="px-6 pb-2">THỜI GIAN</th>
-                      <th className="px-6 pb-2 text-right">SỐ TIỀN</th>
+                      <th className="px-6 pb-2">
+                        <button
+                          onClick={() => toggleSort('time')}
+                          className={cn(
+                            "flex items-center gap-1 hover:text-primary transition-colors",
+                            sortKey === 'time' && "text-primary"
+                          )}
+                        >
+                          THỜI GIAN <ArrowUpDown size={12} className={sortKey === 'time' ? "text-primary" : "opacity-40"} />
+                        </button>
+                      </th>
+                      <th className="px-6 pb-2 text-right">
+                        <button
+                          onClick={() => toggleSort('amount')}
+                          className={cn(
+                            "inline-flex items-center gap-1 hover:text-primary transition-colors",
+                            sortKey === 'amount' && "text-primary"
+                          )}
+                        >
+                          SỐ TIỀN <ArrowUpDown size={12} className={sortKey === 'amount' ? "text-primary" : "opacity-40"} />
+                        </button>
+                      </th>
                       <th className="px-6 pb-2"></th>
                     </tr>
                   </thead>
@@ -691,9 +617,13 @@ export default function Expenses() {
                       >
                         <td className="px-6 py-5 rounded-l-[2rem] border-y border-l border-outline-variant/5">
                           <div className="flex items-center gap-4">
-                            <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", expense.participants?.color_class)}>
-                              {expense.participants?.initials}
-                            </div>
+                            {expense.participants?.avatar_url ? (
+                              <img src={expense.participants.avatar_url} alt={expense.participants?.name} className="w-10 h-10 rounded-full object-cover shadow-sm" />
+                            ) : (
+                              <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", expense.participants?.color_class)}>
+                                {expense.participants?.initials}
+                              </div>
+                            )}
                             <span className="text-base font-bold text-on-surface">{expense.participants?.name}</span>
                           </div>
                         </td>
@@ -767,55 +697,323 @@ export default function Expenses() {
       {/* End Trip Confirmation Modal */}
       <AnimatePresence>
         {isEndTripModalOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setIsEndTripModalOpen(false)}
+              className="absolute inset-0 bg-inverse-surface/10 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white/70 backdrop-blur-2xl border border-white/40 w-full max-w-lg rounded-[2rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.14)] overflow-hidden"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setIsEndTripModalOpen(false)}
+                className="absolute top-6 right-6 text-on-surface-variant hover:text-on-surface transition-colors p-2 rounded-full hover:bg-black/5"
+              >
+                <X size={24} />
+              </button>
+
+              {/* Modal Content */}
+              <div className="p-10 text-center">
+                {/* Icon */}
+                <div className="w-20 h-20 rounded-full bg-gradient-to-br from-primary to-primary-container flex items-center justify-center mx-auto mb-8 shadow-lg shadow-primary/20">
+                  <CheckCircle2 size={40} className="text-white" />
+                </div>
+                <h2 className="text-3xl font-extrabold text-on-surface tracking-tight mb-4 font-headline">
+                  Hoàn thành hành trình?
+                </h2>
+                <p className="text-on-surface-variant text-lg leading-relaxed mb-10 max-w-sm mx-auto">
+                  Chuyến đi của bạn đã kết thúc. Hãy chắc chắn rằng mọi chi phí đã được ghi nhận trước khi chốt quyết toán.
+                </p>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-4">
+                  <button
+                    onClick={() => {
+                      setIsEndTripModalOpen(false);
+                      showToast('Đã chốt quyết toán thành công!', 'success');
+                    }}
+                    className="w-full bg-primary text-on-primary font-bold py-4.5 px-6 rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary-container hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-lg"
+                  >
+                    <span>Xác nhận & Chốt quyết toán</span>
+                    <Flag size={20} />
+                  </button>
+                  <button
+                    onClick={() => setIsEndTripModalOpen(false)}
+                    className="w-full bg-surface-container-high/50 text-on-surface font-semibold py-4 px-6 rounded-2xl hover:bg-surface-container-high transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Eye size={18} />
+                    <span>Xem bản Xem trước (Preview)</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bottom Accent */}
+              <div className="h-1.5 w-full bg-gradient-to-r from-primary via-secondary to-tertiary opacity-80" />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Fund Contribution Modal */}
+      <AnimatePresence>
+        {isFundModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsFundModalOpen(false)}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8"
+              className="relative bg-surface-container-lowest w-full max-w-3xl max-h-[85vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col"
             >
-              <button
-                onClick={() => setIsEndTripModalOpen(false)}
-                className="absolute right-6 top-6 p-2 hover:bg-surface-container rounded-full text-secondary transition-colors"
-              >
-                <X size={20} />
-              </button>
-
-              <div className="mb-6">
-                <div className="w-12 h-12 bg-[#ffcc00] rounded-xl flex items-center justify-center mb-6">
-                  <CheckCircle2 size={24} className="text-white" />
+              <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center shrink-0 bg-surface-container-low">
+                <h2 className="text-xl font-bold font-headline">Danh sách nộp quỹ</h2>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setIsFundAddOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-primary text-white shadow-lg shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
+                  >
+                    <Plus size={14} />
+                    Nộp quỹ
+                  </button>
+                  <button onClick={() => setIsFundModalOpen(false)} className="p-2 hover:bg-surface-container rounded-full">
+                    <X size={20} />
+                  </button>
                 </div>
-                <h2 className="text-3xl font-black font-headline text-on-background mb-4 leading-tight">
-                  Xác nhận Kết thúc Hành trình
-                </h2>
-                <p className="text-secondary font-medium leading-relaxed">
-                  Chuyến đi của bạn đã hoàn thành? Hãy kiểm tra lại các khoản chi trước khi chốt quyết toán cuối cùng.
-                </p>
               </div>
 
-              <div className="space-y-3">
-                <button
-                  onClick={() => {
-                    setIsEndTripModalOpen(false);
-                    showToast('Đã chốt quyết toán thành công!', 'success');
-                  }}
-                  className="w-full bg-primary text-white py-4 rounded-2xl font-bold shadow-lg shadow-primary/20 flex items-center justify-center gap-2 hover:brightness-95 active:scale-95 transition-all"
-                >
-                  Xác nhận & Chốt quyết toán 🚩
+              <div className="overflow-y-auto p-6 flex-1 bg-surface-container-low/40">
+                {/* History Table */}
+                <section>
+                  <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-outline-variant/10 overflow-hidden">
+                    <table className="w-full border-separate border-spacing-y-3">
+                      <thead>
+                        <tr className="text-secondary text-[10px] font-bold uppercase tracking-widest text-left">
+                          <th className="pb-2 px-3">
+                            <button
+                              onClick={() => toggleFundSort('name')}
+                              className={cn("flex items-center gap-1 hover:text-primary transition-colors", fundSortKey === 'name' && "text-primary")}
+                            >
+                              THÀNH VIÊN <ArrowUpDown size={12} className={fundSortKey === 'name' ? "text-primary" : "opacity-40"} />
+                            </button>
+                          </th>
+                          <th className="pb-2 px-3">
+                            <button
+                              onClick={() => toggleFundSort('time')}
+                              className={cn("flex items-center gap-1 hover:text-primary transition-colors", fundSortKey === 'time' && "text-primary")}
+                            >
+                              THỜI GIAN <ArrowUpDown size={12} className={fundSortKey === 'time' ? "text-primary" : "opacity-40"} />
+                            </button>
+                          </th>
+                          <th className="pb-2 px-3 text-right">
+                            <button
+                              onClick={() => toggleFundSort('amount')}
+                              className={cn("inline-flex items-center gap-1 hover:text-primary transition-colors", fundSortKey === 'amount' && "text-primary")}
+                            >
+                              SỐ TIỀN <ArrowUpDown size={12} className={fundSortKey === 'amount' ? "text-primary" : "opacity-40"} />
+                            </button>
+                          </th>
+                          <th className="pb-2 px-3 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {paginatedFundContributions.map((c) => (
+                          <tr key={c.id} className="group hover:bg-surface-container-low transition-colors">
+                            <td className="py-3 px-3 rounded-l-2xl border-y border-l border-outline-variant/5">
+                              <div className="flex items-center gap-3">
+                                {c.participants?.avatar_url ? (
+                                  <img src={c.participants.avatar_url} alt={c.participants?.name} className="w-9 h-9 rounded-full object-cover shadow-sm" />
+                                ) : (
+                                  <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", c.participants?.color_class)}>
+                                    {c.participants?.initials}
+                                  </div>
+                                )}
+                                <span className="text-sm font-bold">{c.participants?.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 border-y border-outline-variant/5 text-xs text-secondary font-medium">
+                              {new Date(c.created_at).toLocaleString('vi-VN', {
+                                day: '2-digit', month: '2-digit', year: 'numeric',
+                                hour: '2-digit', minute: '2-digit'
+                              }).replace(',', '')}
+                            </td>
+                            <td className="py-3 px-3 border-y border-outline-variant/5 text-right font-black text-primary">
+                              {Number(c.amount).toLocaleString('vi-VN')}đ
+                            </td>
+                            <td className="py-3 px-3 rounded-r-2xl border-y border-r border-outline-variant/5">
+                              <button
+                                onClick={() => handleDeleteFundContribution(c.id)}
+                                className="p-2 hover:bg-red-100 rounded-xl text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                        {paginatedFundContributions.length === 0 && (
+                          <tr>
+                            <td colSpan={4} className="py-16 text-center text-secondary text-sm font-medium italic">
+                              Chưa có lịch sử nộp quỹ nào
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+
+                    {fundTotalPages > 1 && (
+                      <div className="flex items-center justify-center gap-6 mt-8">
+                        <button
+                          onClick={() => setFundCurrentPage(prev => Math.max(1, prev - 1))}
+                          disabled={fundCurrentPage === 1}
+                          className="p-2.5 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
+                        >
+                          <ChevronLeft size={18} />
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-secondary uppercase tracking-widest">TRANG</span>
+                          <span className="text-sm font-black text-primary">{fundCurrentPage}</span>
+                          <span className="text-xs font-bold text-secondary">/</span>
+                          <span className="text-sm font-black text-secondary">{fundTotalPages}</span>
+                        </div>
+                        <button
+                          onClick={() => setFundCurrentPage(prev => Math.min(fundTotalPages, prev + 1))}
+                          disabled={fundCurrentPage === fundTotalPages}
+                          className="p-2.5 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
+                        >
+                          <ChevronRight size={18} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Fund Add Modal (sibling, not nested) */}
+      <AnimatePresence>
+        {isFundAddOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsFundAddOpen(false)}
+              className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+            >
+              <div className="p-5 border-b border-outline-variant/20 flex justify-between items-center shrink-0">
+                <h3 className="text-lg font-bold font-headline flex items-center gap-2">
+                  <Plus size={18} className="text-primary" />
+                  Nộp quỹ mới
+                </h3>
+                <button onClick={() => setIsFundAddOpen(false)} className="p-2 hover:bg-surface-container rounded-full">
+                  <X size={18} />
                 </button>
+              </div>
+              <div className="p-5 space-y-5 overflow-y-auto flex-1">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[10px] uppercase font-bold text-secondary tracking-widest">Thành viên</label>
+                    <button
+                      onClick={toggleAllFundParticipants}
+                      className={cn(
+                        "text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-lg transition-all",
+                        fundSelectedParticipants.length === participants.length
+                          ? "bg-primary text-white"
+                          : "bg-surface-container-low text-primary hover:bg-primary/10"
+                      )}
+                    >
+                      {fundSelectedParticipants.length === participants.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                    </button>
+                  </div>
+                  <div className="bg-surface-container-low/50 rounded-2xl p-3 max-h-36 overflow-y-auto scrollbar-hide space-y-1">
+                    {participants.map(p => (
+                      <label
+                        key={p.id}
+                        className={cn(
+                          "flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all",
+                          fundSelectedParticipants.includes(p.id) ? "bg-primary/10" : "hover:bg-surface-container-low"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={fundSelectedParticipants.includes(p.id)}
+                          onChange={() => toggleFundParticipant(p.id)}
+                          className="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary accent-primary"
+                        />
+                        {p.avatar_url ? (
+                          <img src={p.avatar_url} alt={p.name} className="w-7 h-7 rounded-full object-cover shrink-0" />
+                        ) : (
+                          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0", p.colorClass || p.color_class)}>
+                            {p.initials}
+                          </div>
+                        )}
+                        <span className="text-sm font-bold">{p.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {fundSelectedParticipants.length > 0 && (
+                    <p className="text-[9px] text-primary font-bold mt-2 ml-1">
+                      Đã chọn {fundSelectedParticipants.length} thành viên • Tổng: {(Number(fundAmount) * fundSelectedParticipants.length).toLocaleString('vi-VN')}đ
+                    </p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="text-[10px] uppercase font-bold text-secondary tracking-widest mb-3 block">Số tiền / người (VNĐ)</label>
+                  <div className="flex gap-2 mb-3">
+                    {[500000, 1000000, 2000000, 5000000].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => setFundAmount(preset.toString())}
+                        className={cn(
+                          "flex-1 py-2 rounded-xl text-xs font-black transition-all",
+                          fundAmount === preset.toString()
+                            ? "bg-primary text-white shadow-lg shadow-primary/20"
+                            : "bg-surface-container-low text-secondary hover:bg-surface-container"
+                        )}
+                      >
+                        {(preset / 1000).toLocaleString('vi-VN')}k
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="number"
+                    value={fundAmount}
+                    onChange={(e) => setFundAmount(e.target.value)}
+                    placeholder="Hoặc nhập số tiền khác..."
+                    className="w-full bg-surface-container-low border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary font-bold text-lg"
+                  />
+                </div>
+              </div>
+              <div className="p-5 border-t border-outline-variant/10 shrink-0">
                 <button
-                  onClick={() => setIsEndTripModalOpen(false)}
-                  className="w-full bg-[#ffcc00] text-on-background py-4 rounded-2xl font-bold shadow-lg flex items-center justify-center gap-2 hover:brightness-95 active:scale-95 transition-all"
+                  onClick={handleFundConfirm}
+                  disabled={fundSelectedParticipants.length === 0 || !fundAmount}
+                  className="w-full bg-primary text-white py-4 rounded-2xl font-black shadow-xl shadow-primary/25 flex items-center justify-center gap-2 hover:brightness-110 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Tag size={18} />
-                  Xem bản Xem trước (Preview)
+                  <Plus size={20} />
+                  Xác nhận nộp quỹ
                 </button>
               </div>
             </motion.div>

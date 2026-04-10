@@ -4,6 +4,7 @@ export interface Participant {
   initials: string;
   color_class: string;
   colorClass?: string;
+  avatar_url?: string;
 }
 
 export interface Activity {
