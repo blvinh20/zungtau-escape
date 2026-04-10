@@ -79,10 +79,20 @@ export const deleteParticipant = async (id: string) => {
   if (error) throw error;
 };
 
+export const updateParticipant = async (id: string, updates: any) => {
+  const { data, error } = await supabase
+    .from('participants')
+    .update(updates)
+    .eq('id', id)
+    .select();
+  if (error) throw error;
+  return data[0];
+};
+
 export const getExpenses = async () => {
   const { data, error } = await supabase
     .from('expenses')
-    .select('*, participants!expenses_payer_id_fkey(name, initials, color_class), expense_participants(participant_id)')
+    .select('*, participants!expenses_payer_id_fkey(name, initials, color_class, avatar_url), expense_participants(participant_id)')
     .order('date', { ascending: false });
   if (error) throw error;
   return data;
@@ -163,7 +173,7 @@ export const deleteMemory = async (id: string) => {
 export const getFundContributions = async () => {
   const { data, error } = await supabase
     .from('fund_contributions')
-    .select('*, participants(name, initials, color_class)')
+    .select('*, participants(name, initials, color_class, avatar_url)')
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data;
@@ -176,6 +186,14 @@ export const addFundContribution = async (contribution: any) => {
     .select();
   if (error) throw error;
   return data[0];
+};
+
+export const deleteFundContribution = async (id: string) => {
+  const { error } = await supabase
+    .from('fund_contributions')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
 };
 
 export const uploadImage = async (file: File, bucket: string = 'memories') => {
