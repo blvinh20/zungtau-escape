@@ -1,13 +1,25 @@
-import React, { useState, useRef } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
-import { Bell, Settings, Compass, Wallet, Image as ImageIcon, UserPlus, X, Camera, Trash2, Pencil } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Settings, Compass, Wallet, Image as ImageIcon, UserPlus, X, Camera, Trash2, Pencil, ShieldCheck, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { useParticipants } from './ParticipantContext';
 import { Participant } from '../types';
 
 export default function Layout() {
-  const { participants, addParticipant, removeParticipant, updateAvatar } = useParticipants();
+  const navigate = useNavigate();
+  const { participants, addParticipant, removeParticipant, updateAvatar, treasurerId, setTreasurerId } = useParticipants();
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('theme') === 'dark';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
   const [isManageOpen, setIsManageOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newAvatar, setNewAvatar] = useState<File | null>(null);
@@ -32,9 +44,12 @@ export default function Layout() {
   return (
     <div className="min-h-screen bg-background text-on-surface">
       {/* Top Navigation Bar */}
-      <nav className="fixed top-0 w-full z-50 bg-background/70 backdrop-blur-md shadow-[0_12px_32px_rgba(28,28,17,0.06)]">
+      <nav className="fixed top-0 w-full z-50 bg-background/70 backdrop-blur-md shadow-[0_12px_32px_rgba(28,28,17,0.06)] dark:shadow-[0_12px_32px_rgba(0,0,0,0.3)]">
         <div className="flex justify-between items-center px-6 py-3 max-w-7xl mx-auto">
-          <div className="text-2xl font-bold tracking-tighter text-primary font-headline">
+          <div
+            onClick={() => navigate('/itinerary')}
+            className="text-2xl font-bold tracking-tighter text-primary font-headline cursor-pointer hover:opacity-70 transition-opacity"
+          >
             Vũng Tàu Escape
           </div>
           <div className="hidden md:flex items-center space-x-8 font-headline font-bold tracking-tight">
@@ -124,8 +139,12 @@ export default function Layout() {
               <UserPlus size={20} />
             </button>
 
-            <button className="text-primary hover:opacity-70 transition-opacity">
-              <Settings size={20} />
+            <button
+              onClick={() => setIsDark(!isDark)}
+              className="p-2 text-primary hover:bg-primary/10 rounded-full transition-colors"
+              title={isDark ? 'Chế độ sáng' : 'Chế độ tối'}
+            >
+              {isDark ? <Sun size={20} /> : <Moon size={20} />}
             </button>
           </div>
         </div>
@@ -237,14 +256,35 @@ export default function Layout() {
                               <Pencil size={10} />
                             </button>
                           </div>
-                          <span className="font-semibold">{p.name}</span>
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{p.name}</span>
+                            {treasurerId === p.id && (
+                              <span className="text-[9px] font-black uppercase tracking-widest text-primary flex items-center gap-0.5">
+                                <ShieldCheck size={10} /> Thủ quỹ
+                              </span>
+                            )}
+                          </div>
                         </div>
-                        <button
-                          onClick={() => removeParticipant(p.id)}
-                          className="p-3 hover:bg-red-100 rounded-xl text-red-500 transition-all"
-                        >
-                          <Trash2 size={20} />
-                        </button>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setTreasurerId(treasurerId === p.id ? '' : p.id)}
+                            className={cn(
+                              "p-2 rounded-xl transition-all",
+                              treasurerId === p.id
+                                ? "bg-primary/10 text-primary"
+                                : "hover:bg-surface-container text-on-surface-variant"
+                            )}
+                            title={treasurerId === p.id ? 'Bỏ thủ quỹ' : 'Đặt làm thủ quỹ'}
+                          >
+                            <ShieldCheck size={18} />
+                          </button>
+                          <button
+                            onClick={() => removeParticipant(p.id)}
+                            className="p-2 hover:bg-red-100 rounded-xl text-red-500 transition-all"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
                       </div>
                     ))}
                     <input
@@ -313,7 +353,7 @@ export default function Layout() {
       </main>
 
       {/* Bottom Navigation Bar (Mobile Only) */}
-      <nav className="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-4 pt-2 bg-background/70 backdrop-blur-md shadow-[0_-8px_24px_rgba(28,28,17,0.04)] z-50 rounded-t-[1rem]">
+      <nav className="md:hidden fixed bottom-0 left-0 w-full flex justify-around items-center px-4 pb-4 pt-2 bg-background/70 backdrop-blur-md shadow-[0_-8px_24px_rgba(28,28,17,0.04)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.3)] z-50 rounded-t-[1rem]">
         <NavLink
           to="/itinerary"
           className={({ isActive }) =>

@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown, Flag, Eye, Camera } from 'lucide-react';
+import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown, Flag, Eye, Camera, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution, deleteFundContribution } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
+import SettlementPreview from './SettlementPreview';
 import { useToast } from './Toast';
 import { useParticipants } from './ParticipantContext';
 
 export default function Expenses() {
-  const { participants } = useParticipants();
+  const { participants, treasurerId } = useParticipants();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [fundContributions, setFundContributions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { showToast } = useToast();
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [isEndTripModalOpen, setIsEndTripModalOpen] = useState(false);
+  const [isSettlementOpen, setIsSettlementOpen] = useState(false);
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [isFundAddOpen, setIsFundAddOpen] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
@@ -289,9 +291,9 @@ export default function Expenses() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-12 pb-20">
-      <header className="relative mb-16 h-72 rounded-[3rem] overflow-visible flex flex-col justify-center px-12 shadow-sm border border-outline-variant/10">
-        <div className="absolute inset-0 z-0 overflow-hidden rounded-[3rem]">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-20">
+      <header className="relative mb-8 sm:mb-16 h-48 sm:h-72 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
+        <div className="absolute inset-0 z-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem]">
           <img
             src="/images/background.png"
             alt="Expenses Background"
@@ -302,7 +304,7 @@ export default function Expenses() {
         </div>
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div>
-            <h1 className="text-6xl font-black tracking-tighter text-primary font-headline mb-3">
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tighter text-primary font-headline mb-3">
               Quản lý chi phí
             </h1>
             <p className="text-on-surface-variant max-w-md leading-relaxed">
@@ -318,13 +320,13 @@ export default function Expenses() {
           animate={{ opacity: 1, y: 0 }}
           whileHover={{ scale: 1.03, y: -4 }}
           transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-          className="bg-surface-container p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border border-outline-variant/10 cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
+          className="bg-surface-container p-8 md:p-10 rounded-[2rem] shadow-sm overflow-hidden border-l-4 border-primary cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
         >
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest">TỔNG NGÂN SÁCH</h3>
-            <div className="w-12 h-12 shrink-0 bg-primary/10 rounded-2xl flex items-center justify-center">
-              <Wallet size={24} className="text-primary" />
-            </div>
+            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+              <Wallet size={14} className="text-primary" />
+              TỔNG NGÂN SÁCH
+            </h3>
           </div>
           <p className="text-4xl font-black text-on-surface font-headline mb-6 whitespace-nowrap">
             {totalFund.toLocaleString('vi-VN')} <span className="text-xl">đ</span>
@@ -342,19 +344,19 @@ export default function Expenses() {
           animate={{ opacity: 1, y: 0 }}
           whileHover={{ scale: 1.03, y: -4 }}
           transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
-          className="bg-surface-container p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border border-outline-variant/10 cursor-pointer hover:shadow-xl hover:shadow-primary/10 transition-shadow duration-300"
+          className="bg-surface-container p-8 md:p-10 rounded-[2rem] shadow-sm overflow-hidden border-l-4 border-tertiary cursor-pointer hover:shadow-xl hover:shadow-tertiary/10 transition-shadow duration-300"
         >
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest">THỰC CHI</h3>
-            <div className="w-12 h-12 shrink-0 bg-primary/10 rounded-2xl flex items-center justify-center">
-              <Receipt size={24} className="text-primary" />
-            </div>
+            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+              <Receipt size={14} className="text-tertiary" />
+              THỰC CHI
+            </h3>
           </div>
-          <p className="text-4xl font-black text-primary font-headline mb-6 whitespace-nowrap">
+          <p className="text-4xl font-black text-tertiary font-headline mb-6 whitespace-nowrap">
             {totalSpending.toLocaleString('vi-VN')} <span className="text-xl">đ</span>
           </p>
           <div className="flex items-center gap-2">
-            <div className="bg-primary px-2 py-0.5 rounded text-[10px] font-black text-white uppercase tracking-widest">THỰC TẾ</div>
+            <div className="bg-tertiary px-2 py-0.5 rounded text-[10px] font-black text-white uppercase tracking-widest">THỰC TẾ</div>
             <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest">Cập nhật theo khoản chi</span>
           </div>
         </motion.div>
@@ -365,15 +367,15 @@ export default function Expenses() {
           whileHover={{ scale: 1.03, y: -4 }}
           transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.2 }}
           className={cn(
-            "p-8 md:p-10 rounded-[3rem] shadow-sm overflow-hidden border-l-[12px] bg-surface-container cursor-pointer hover:shadow-xl transition-shadow duration-300",
+            "p-8 md:p-10 rounded-[2rem] shadow-sm overflow-hidden border-l-4 bg-surface-container cursor-pointer hover:shadow-xl transition-shadow duration-300",
             remainingFund < 0 ? "border-red-500" : remainingFund > totalFund * 0.3 ? "border-emerald-500" : "border-[#8b7e3d]"
           )}
         >
           <div className="flex items-start justify-between gap-4 mb-6">
-            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest">QUỸ CÒN LẠI</h3>
-            <div className={cn("w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center", remainingFund < 0 ? "bg-red-500/10" : remainingFund > totalFund * 0.3 ? "bg-emerald-500/10" : "bg-[#8b7e3d]/10")}>
-              <PiggyBank size={24} className={cn(remainingFund < 0 ? "text-red-600" : remainingFund > totalFund * 0.3 ? "text-emerald-600" : "text-[#8b7e3d]")} />
-            </div>
+            <h3 className="text-on-surface-variant text-[15px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+              <PiggyBank size={14} className={cn(remainingFund < 0 ? "text-red-600" : remainingFund > totalFund * 0.3 ? "text-emerald-600" : "text-[#8b7e3d]")} />
+              QUỸ CÒN LẠI
+            </h3>
           </div>
           <p className={cn(
             "text-4xl font-black font-headline mb-6 whitespace-nowrap",
@@ -512,7 +514,7 @@ export default function Expenses() {
               <div className="p-6 bg-surface-container-low flex gap-3">
                 <button
                   onClick={closeExpenseModal}
-                  className="flex-1 bg-primary text-on-primary px-6 py-3 rounded-xl font-bold shadow-lg hover:opacity-90 active:scale-95 transition-all"
+                  className="flex-1 bg-surface-container-high text-on-surface px-6 py-3 rounded-xl font-bold hover:bg-surface-container transition-all"
                 >
                   Hủy
                 </button>
@@ -536,27 +538,28 @@ export default function Expenses() {
       ) : (
         <div className="space-y-12">
           <section>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 px-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 mb-10 px-2 sm:px-4">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-surface-container-low rounded-2xl flex items-center justify-center">
+                <div className="w-10 sm:w-12 h-10 sm:h-12 bg-surface-container-low rounded-2xl flex items-center justify-center">
                   <Wallet size={24} className="text-secondary opacity-60" />
                 </div>
                 <div>
-                  <h2 className="text-3xl font-black font-headline text-on-surface">Danh sách khoản chi</h2>
+                  <h2 className="text-2xl sm:text-3xl font-black font-headline text-on-surface">Danh sách khoản chi</h2>
                   <p className="text-[10px] text-secondary font-bold uppercase tracking-widest mt-1">CẬP NHẬT: {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 sm:gap-4">
                 <button
                   onClick={() => setIsAddExpenseModalOpen(true)}
-                  className="flex items-center gap-2 bg-primary text-white px-8 py-4 rounded-2xl font-black shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all"
+                  className="flex items-center gap-2 bg-primary text-white px-4 sm:px-8 py-3 sm:py-4 rounded-2xl font-black shadow-xl shadow-primary/20 hover:brightness-110 active:scale-95 transition-all text-sm sm:text-base"
                 >
-                  <Plus size={20} />
-                  Thêm khoản chi
+                  <Plus size={18} />
+                  <span className="hidden sm:inline">Thêm khoản chi</span>
+                  <span className="sm:hidden">Thêm</span>
                 </button>
                 <button
                   onClick={() => setIsEndTripModalOpen(true)}
-                  className="flex items-center gap-2 bg-[#ffdc2e] text-on-surface-variant px-8 py-4 rounded-2xl font-black shadow-xl shadow-[#ffdc2e]/20 hover:brightness-110 active:scale-95 transition-all"
+                  className="flex items-center gap-2 bg-[#ffdc2e] text-on-surface-variant px-4 sm:px-8 py-3 sm:py-4 rounded-2xl font-black shadow-xl shadow-[#ffdc2e]/20 hover:brightness-110 active:scale-95 transition-all text-sm sm:text-base"
                 >
                   <CheckCircle2 size={20} />
                   Kết thúc hành trình
@@ -564,9 +567,9 @@ export default function Expenses() {
               </div>
             </div>
 
-            <div className="bg-white rounded-[3rem] p-8 shadow-sm border border-outline-variant/10 overflow-hidden">
+            <div className="bg-surface-container-lowest rounded-[2rem] p-8 shadow-sm border border-outline-variant/10 overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-separate border-spacing-y-4">
+                <table className="w-full min-w-[600px] border-separate border-spacing-y-4">
                   <thead>
                     <tr className="text-secondary text-[10px] font-bold uppercase tracking-widest text-left">
                       <th className="px-6 pb-2">
@@ -624,7 +627,14 @@ export default function Expenses() {
                                 {expense.participants?.initials}
                               </div>
                             )}
-                            <span className="text-base font-bold text-on-surface">{expense.participants?.name}</span>
+                            <div className="flex flex-col">
+                              <span className="text-base font-bold text-on-surface">{expense.participants?.name}</span>
+                              {expense.payer_id === treasurerId && (
+                                <span className="text-[9px] font-black uppercase tracking-widest text-primary flex items-center gap-0.5">
+                                  <ShieldCheck size={10} /> Thủ quỹ
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                         <td className="px-6 py-5 border-y border-outline-variant/5">
@@ -745,7 +755,10 @@ export default function Expenses() {
                     <Flag size={20} />
                   </button>
                   <button
-                    onClick={() => setIsEndTripModalOpen(false)}
+                    onClick={() => {
+                      setIsEndTripModalOpen(false);
+                      setIsSettlementOpen(true);
+                    }}
                     className="w-full bg-surface-container-high/50 text-on-surface font-semibold py-4 px-6 rounded-2xl hover:bg-surface-container-high transition-colors flex items-center justify-center gap-2"
                   >
                     <Eye size={18} />
@@ -797,7 +810,7 @@ export default function Expenses() {
               <div className="overflow-y-auto p-6 flex-1 bg-surface-container-low/40">
                 {/* History Table */}
                 <section>
-                  <div className="bg-white rounded-[2rem] p-6 shadow-sm border border-outline-variant/10 overflow-hidden">
+                  <div className="bg-surface-container-lowest rounded-[2rem] p-6 shadow-sm border border-outline-variant/10 overflow-hidden">
                     <table className="w-full border-separate border-spacing-y-3">
                       <thead>
                         <tr className="text-secondary text-[10px] font-bold uppercase tracking-widest text-left">
@@ -919,7 +932,7 @@ export default function Expenses() {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+              className="relative bg-surface-container-lowest w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
             >
               <div className="p-5 border-b border-outline-variant/20 flex justify-between items-center shrink-0">
                 <h3 className="text-lg font-bold font-headline flex items-center gap-2">
@@ -1020,6 +1033,20 @@ export default function Expenses() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* Settlement Preview Modal */}
+      <SettlementPreview
+        isOpen={isSettlementOpen}
+        onClose={() => setIsSettlementOpen(false)}
+        participants={participants}
+        expenses={expenses}
+        fundContributions={fundContributions}
+        treasurerId={treasurerId}
+        onConfirmSettlement={() => {
+          setIsSettlementOpen(false);
+          showToast('Đã chốt quyết toán thành công!', 'success');
+        }}
+      />
     </div>
   );
 }

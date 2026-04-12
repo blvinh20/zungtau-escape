@@ -1,31 +1,53 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CloudUpload, Loader2, X, Trash2, Download, ChevronLeft, ChevronRight, Clock, ImagePlus } from 'lucide-react';
+import { CloudUpload, Loader2, X, Trash2, Download, ChevronLeft, ChevronRight, Clock, ImagePlus, CheckCircle2, XCircle, Check } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getMemories, addMemory as addMemorySupabase, uploadImage, deleteMemory as deleteMemorySupabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import ConfirmModal from './ConfirmModal';
 
-function formatRelativeTime(dateStr: string): string {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  const diffHour = Math.floor(diffMs / 3600000);
-  const diffDay = Math.floor(diffMs / 86400000);
-
-  if (diffMin < 1) return 'Vừa xong';
-  if (diffMin < 60) return `${diffMin} phút trước`;
-  if (diffHour < 24) return `${diffHour} giờ trước`;
-  if (diffDay < 7) return `${diffDay} ngày trước`;
-  return date.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+interface DateGroup {
+  key: string;
+  label: string;
+  sublabel: string;
+  photos: any[];
 }
 
-function formatFullDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleString('vi-VN', {
-    hour: '2-digit', minute: '2-digit',
-    day: '2-digit', month: '2-digit', year: 'numeric'
-  }).replace(',', '');
+function groupByDate(memories: any[]): DateGroup[] {
+  const now = new Date();
+  const today = now.toDateString();
+  const yesterday = new Date(now.getTime() - 86400000).toDateString();
+
+  const groups = new Map<string, any[]>();
+
+  memories.forEach(m => {
+    const date = new Date(m.created_at);
+    const key = date.toDateString();
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(m);
+  });
+
+  const result: DateGroup[] = [];
+  groups.forEach((photos, key) => {
+    const date = new Date(key);
+    let label: string;
+    let sublabel: string;
+
+    if (key === today) {
+      label = 'Hôm nay';
+      sublabel = date.toLocaleDateString('vi-VN', { weekday: 'long' });
+    } else if (key === yesterday) {
+      label = 'Hôm qua';
+      sublabel = date.toLocaleDateString('vi-VN', { weekday: 'long' });
+    } else {
+      label = date.toLocaleDateString('vi-VN', { day: '2-digit', month: 'long' });
+      sublabel = date.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric' });
+    }
+
+    result.push({ key, label, sublabel, photos });
+  });
+
+  return result;
 }
 
 export default function Memories() {
@@ -35,6 +57,9 @@ export default function Memories() {
   const [uploading, setUploading] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -47,6 +72,8 @@ export default function Memories() {
   });
 
   const [uploadFiles, setUploadFiles] = useState<{ file: File; preview: string; name: string }[]>([]);
+
+  const dateGroups = useMemo(() => groupByDate(memories), [memories]);
 
   useEffect(() => {
     const fetchMemories = async () => {
@@ -65,7 +92,6 @@ export default function Memories() {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-
     const entries: { file: File; preview: string; name: string }[] = [];
     Array.from(files).forEach((f: File) => {
       const preview = URL.createObjectURL(f);
@@ -129,6 +155,48 @@ export default function Memories() {
     });
   };
 
+  const handleBatchDelete = () => {
+    const count = selectedIds.size;
+    if (count === 0) return;
+    setConfirmConfig({
+      isOpen: true,
+      title: `Xóa ${count} ảnh`,
+      message: `Bạn có chắc chắn muốn xóa ${count} ảnh đã chọn? Hành động này không thể hoàn tác.`,
+      type: 'danger',
+      onConfirm: async () => {
+        try {
+          await Promise.all([...selectedIds].map(id => deleteMemorySupabase(id)));
+          setMemories(prev => prev.filter(m => !selectedIds.has(m.id)));
+          showToast(`Đã xóa ${count} ảnh`, 'success');
+          setSelectedIds(new Set());
+          setSelectionMode(false);
+          setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+        } catch (error) {
+          console.error('Error batch deleting:', error);
+          showToast('Xóa thất bại', 'error');
+        }
+      }
+    });
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAll = () => {
+    setSelectedIds(new Set(memories.map(m => m.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  };
+
   const handleDownload = useCallback(async (imageUrl: string, title: string) => {
     try {
       const response = await fetch(imageUrl);
@@ -147,17 +215,24 @@ export default function Memories() {
     }
   }, [showToast]);
 
-  const openLightbox = (index: number) => setLightboxIndex(index);
+  const openLightbox = (index: number) => {
+    if (selectionMode) return;
+    setLightboxIndex(index);
+  };
   const closeLightbox = () => setLightboxIndex(null);
   const goPrev = () => setLightboxIndex(prev => prev !== null ? Math.max(0, prev - 1) : null);
   const goNext = () => setLightboxIndex(prev => prev !== null ? Math.min(memories.length - 1, prev + 1) : null);
-
   const currentMemory = lightboxIndex !== null ? memories[lightboxIndex] : null;
 
+  // Build flat index for lightbox
+  const flatPhotos = useMemo(() => memories, [memories]);
+  const getFlatIndex = (photo: any) => flatPhotos.findIndex(m => m.id === photo.id);
+
   return (
-    <div className="max-w-7xl mx-auto px-6 pt-8 pb-20">
-      <header className="relative mb-12 h-64 rounded-[3rem] overflow-visible flex flex-col justify-center px-12 shadow-sm border border-outline-variant/10">
-        <div className="absolute inset-0 z-0 overflow-hidden rounded-[3rem]">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-28 sm:pb-20">
+      {/* Header with background */}
+      <header className="relative mb-12 h-48 sm:h-64 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
+        <div className="absolute inset-0 z-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem]">
           <img
             src="/images/background.png"
             alt="Memories Background"
@@ -167,37 +242,79 @@ export default function Memories() {
           <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />
         </div>
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="max-w-2xl">
-            <h1 className="text-6xl font-black tracking-tighter text-primary mb-3 font-headline">
-              Tường Kỷ Niệm
+          <div>
+            <h1 className="text-4xl sm:text-6xl font-black tracking-tighter text-primary mb-2 font-headline">
+              Kỷ niệm
             </h1>
             <p className="text-on-surface-variant leading-relaxed">
               Lưu giữ những khoảnh khắc tuyệt vời nhất tại thành phố biển Vũng Tàu.
             </p>
           </div>
-          <div className="relative">
-            <input
-              type="file"
-              id="memory-upload"
-              className="hidden"
-              accept="image/*"
-              multiple
-              onChange={handleFileSelect}
-              disabled={uploading}
-            />
-            <label
-              htmlFor="memory-upload"
-              className={cn(
-                "flex items-center gap-2 bg-primary text-white px-6 py-4 rounded-2xl font-bold shadow-xl shadow-primary/20 active:scale-95 transition-all duration-200 cursor-pointer hover:brightness-110",
-                uploading && "opacity-70 cursor-not-allowed"
-              )}
-            >
-              {uploading ? <Loader2 className="animate-spin" size={20} /> : <ImagePlus size={20} />}
-              <span>{uploading ? 'Đang tải...' : 'Thêm ảnh'}</span>
-            </label>
-          </div>
         </div>
       </header>
+
+      {/* Selection Toolbar */}
+      <AnimatePresence>
+        {selectionMode && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="fixed top-16 left-0 right-0 z-[60] bg-primary text-white px-4 py-3 flex items-center justify-between shadow-lg"
+          >
+            <div className="flex items-center gap-3">
+              <button onClick={clearSelection} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+                <X size={22} />
+              </button>
+              <span className="font-bold">
+                {selectedIds.size > 0 ? `Đã chọn ${selectedIds.size}` : 'Chọn ảnh'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAll}
+                className="text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors"
+              >
+                Chọn tất cả
+              </button>
+              {selectedIds.size > 0 && (
+                <>
+                  <button
+                    onClick={async () => {
+                      for (const id of selectedIds) {
+                        const m = memories.find(mem => mem.id === id);
+                        if (m) await handleDownload(m.image_url || m.imageUrl, m.title);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    <Download size={14} />
+                    Lưu
+                  </button>
+                  <button
+                    onClick={handleBatchDelete}
+                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                  >
+                    <Trash2 size={14} />
+                    Xóa ({selectedIds.size})
+                  </button>
+                </>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hidden File Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept="image/*"
+        multiple
+        onChange={handleFileSelect}
+        disabled={uploading}
+      />
 
       <ConfirmModal
         isOpen={confirmConfig.isOpen}
@@ -293,7 +410,6 @@ export default function Memories() {
               exit={{ opacity: 0, scale: 0.9 }}
               className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4 md:p-10"
             >
-              {/* Close */}
               <button
                 onClick={closeLightbox}
                 className="absolute top-4 right-4 md:top-6 md:right-6 p-3 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all z-20"
@@ -301,21 +417,19 @@ export default function Memories() {
                 <X size={24} />
               </button>
 
-              {/* Image */}
-              <div className="relative max-w-4xl w-full max-h-[80vh] flex items-center justify-center">
+              <div className="relative max-w-4xl w-full max-h-[70vh] flex items-center justify-center">
                 <img
                   src={currentMemory.image_url || currentMemory.imageUrl}
                   alt={currentMemory.title}
-                  className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
+                  className="max-w-full max-h-[70vh] object-contain rounded-2xl shadow-2xl"
                   referrerPolicy="no-referrer"
                 />
               </div>
 
-              {/* Navigation */}
               {lightboxIndex > 0 && (
                 <button
                   onClick={goPrev}
-                  className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all"
+                  className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all z-20"
                 >
                   <ChevronLeft size={28} />
                 </button>
@@ -323,22 +437,35 @@ export default function Memories() {
               {lightboxIndex < memories.length - 1 && (
                 <button
                   onClick={goNext}
-                  className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all"
+                  className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all z-20"
                 >
                   <ChevronRight size={28} />
                 </button>
               )}
 
-              {/* Counter */}
-              <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/50 text-sm font-bold">
-                {lightboxIndex + 1} / {memories.length}
-              </span>
+              {/* Info bar */}
+              <div className="flex items-center gap-4 text-white/60 mt-4 z-20">
+                <span className="text-sm font-bold">{lightboxIndex + 1} / {memories.length}</span>
+                {currentMemory.title && <span className="text-sm truncate max-w-[200px]">• {currentMemory.title}</span>}
+                <button
+                  onClick={() => handleDownload(currentMemory.image_url || currentMemory.imageUrl, currentMemory.title)}
+                  className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  onClick={() => handleDeleteMemory(currentMemory.id)}
+                  className="p-2 bg-red-500/40 hover:bg-red-500/60 rounded-full transition-colors"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
 
-      {/* Photo Grid */}
+      {/* Content */}
       {loading ? (
         <div className="flex flex-col items-center justify-center py-20 text-secondary">
           <Loader2 className="animate-spin mb-4" size={48} />
@@ -348,55 +475,135 @@ export default function Memories() {
         <div className="flex flex-col items-center justify-center py-20 text-secondary">
           <ImagePlus size={64} className="opacity-30 mb-4" />
           <p className="font-bold text-lg mb-1">Chưa có kỷ niệm nào</p>
-          <p className="text-sm opacity-60">Nhấn "Thêm ảnh" để bắt đầu lưu giữ khoảnh khắc</p>
+          <p className="text-sm opacity-60">Nhấn nút + để bắt đầu lưu giữ khoảnh khắc</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {memories.map((memory, index) => (
-            <motion.div
-              key={memory.id}
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ delay: index * 0.05 }}
-              onClick={() => openLightbox(index)}
-              className="group cursor-pointer"
-            >
-              <div className="relative aspect-square rounded-2xl overflow-hidden bg-surface-container-low shadow-sm group-hover:shadow-xl transition-all duration-300">
-                <img
-                  src={memory.image_url || memory.imageUrl}
-                  alt={memory.title}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  referrerPolicy="no-referrer"
-                />
-                {/* Overlay */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/0 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3">
-                  <div className="flex justify-end gap-1.5">
+        <div className="space-y-10">
+          {dateGroups.map(group => (
+            <section key={group.key}>
+              {/* Date Header */}
+              <div className="flex items-baseline justify-between mb-4 px-1">
+                <div>
+                  <h3 className="text-lg font-headline font-bold text-on-surface">{group.label}</h3>
+                  <p className="text-xs text-on-surface-variant">{group.sublabel}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-on-surface-variant">{group.photos.length} ảnh</span>
+                  {!selectionMode && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); handleDownload(memory.image_url || memory.imageUrl, memory.title); }}
-                      className="p-2 bg-white/20 hover:bg-white/30 text-white rounded-xl transition-colors"
+                      onClick={() => setSelectionMode(true)}
+                      className="text-primary font-bold text-xs hover:bg-primary/10 px-3 py-1 rounded-lg transition-colors"
                     >
-                      <Download size={16} />
+                      Chọn
                     </button>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); handleDeleteMemory(memory.id); }}
-                      className="p-2 bg-red-500/60 hover:bg-red-500/80 text-white rounded-xl transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                  <div>
-                    <p className="text-white font-bold text-sm truncate">{memory.title}</p>
-                    <div className="flex items-center gap-1 text-white/70 text-[10px] mt-0.5">
-                      <Clock size={10} />
-                      <span>{formatRelativeTime(memory.created_at)}</span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
-            </motion.div>
+
+              {/* Photo Grid */}
+              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-2">
+                {group.photos.map((memory, index) => {
+                  const isFirst = index === 0;
+                  const isSelected = selectedIds.has(memory.id);
+                  const flatIdx = getFlatIndex(memory);
+
+                  return (
+                    <motion.div
+                      key={memory.id}
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: index * 0.03 }}
+                      onClick={() => {
+                        if (selectionMode) {
+                          toggleSelect(memory.id);
+                        } else {
+                          openLightbox(flatIdx);
+                        }
+                      }}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (!selectionMode) {
+                          setSelectionMode(true);
+                          toggleSelect(memory.id);
+                        }
+                      }}
+                      className={cn(
+                        "relative cursor-pointer group overflow-hidden rounded-lg sm:rounded-xl",
+                        isFirst && "col-span-2 row-span-2",
+                        selectionMode && isSelected && "ring-3 ring-primary ring-offset-2 ring-offset-background"
+                      )}
+                    >
+                      <div className={cn(
+                        "bg-surface-container-low",
+                        isFirst ? "aspect-square" : "aspect-square"
+                      )}>
+                        <img
+                          src={memory.image_url || memory.imageUrl}
+                          alt={memory.title}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                          referrerPolicy="no-referrer"
+                        />
+                      </div>
+
+                      {/* Selection Checkbox */}
+                      {selectionMode && (
+                        <div className={cn(
+                          "absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all",
+                          isSelected ? "bg-primary" : "bg-black/30 group-hover:bg-black/50"
+                        )}>
+                          {isSelected ? <Check size={14} className="text-white" /> : <div className="w-3 h-3 rounded-full border-2 border-white/60" />}
+                        </div>
+                      )}
+
+                      {/* Hover Overlay (non-selection mode) */}
+                      {!selectionMode && (
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2 sm:p-3">
+                          <p className={cn("text-white font-bold truncate", isFirst ? "text-sm sm:text-base" : "text-[11px]")}>{memory.title}</p>
+                          <p className="text-white/70 text-[10px] flex items-center gap-1 mt-0.5">
+                            <Clock size={10} />
+                            {memory.created_at && new Date(memory.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </section>
           ))}
         </div>
       )}
+
+      {/* FAB Upload Button */}
+      <AnimatePresence>
+        {!selectionMode && (
+          <motion.button
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className={cn(
+              "fixed z-50 w-14 h-14 rounded-full bg-primary text-white shadow-xl shadow-primary/30",
+              "hover:brightness-110 active:scale-90 transition-all duration-200",
+              "flex items-center justify-center",
+              "right-4 bottom-24 sm:right-8 sm:bottom-8",
+              uploading && "opacity-70 cursor-not-allowed"
+            )}
+          >
+            {uploading ? <Loader2 className="animate-spin" size={24} /> : <Plus size={24} />}
+          </motion.button>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// Simple plus icon for FAB
+function Plus({ size = 24, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 5v14" /><path d="M5 12h14" />
+    </svg>
   );
 }

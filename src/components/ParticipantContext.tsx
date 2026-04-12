@@ -6,6 +6,8 @@ import { useToast } from './Toast';
 interface ParticipantContextType {
   participants: Participant[];
   loading: boolean;
+  treasurerId: string;
+  setTreasurerId: (id: string) => void;
   addParticipant: (name: string, avatarFile?: File | null) => Promise<void>;
   removeParticipant: (id: string) => Promise<void>;
   updateAvatar: (id: string, file: File) => Promise<void>;
@@ -14,6 +16,8 @@ interface ParticipantContextType {
 const ParticipantContext = createContext<ParticipantContextType>({
   participants: [],
   loading: true,
+  treasurerId: '',
+  setTreasurerId: () => {},
   addParticipant: async () => {},
   removeParticipant: async () => {},
   updateAvatar: async () => {},
@@ -27,7 +31,15 @@ const sortByName = (list: Participant[]) =>
 export default function ParticipantProvider({ children }: { children: React.ReactNode }) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [treasurerId, setTreasurerIdRaw] = useState(() => {
+    try { return localStorage.getItem('treasurerId') || ''; } catch { return ''; }
+  });
   const { showToast } = useToast();
+
+  const setTreasurerId = (id: string) => {
+    setTreasurerIdRaw(id);
+    try { localStorage.setItem('treasurerId', id); } catch {}
+  };
 
   useEffect(() => {
     const fetch = async () => {
@@ -81,6 +93,7 @@ export default function ParticipantProvider({ children }: { children: React.Reac
     try {
       await deleteParticipantSupabase(id);
       setParticipants(prev => prev.filter(p => p.id !== id));
+      if (treasurerId === id) { setTreasurerIdRaw(''); try { localStorage.removeItem('treasurerId'); } catch {} }
       showToast('Xóa thành viên thành công', 'success');
     } catch (error) {
       console.error('Error removing participant:', error);
@@ -103,7 +116,7 @@ export default function ParticipantProvider({ children }: { children: React.Reac
   };
 
   return (
-    <ParticipantContext.Provider value={{ participants, loading, addParticipant, removeParticipant, updateAvatar }}>
+    <ParticipantContext.Provider value={{ participants, loading, treasurerId, setTreasurerId, addParticipant, removeParticipant, updateAvatar }}>
       {children}
     </ParticipantContext.Provider>
   );
