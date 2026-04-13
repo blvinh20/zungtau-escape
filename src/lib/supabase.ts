@@ -170,6 +170,16 @@ export const deleteMemory = async (id: string) => {
   if (error) throw error;
 };
 
+export const updateMemory = async (id: string, updates: any) => {
+  const { data, error } = await supabase
+    .from('memories')
+    .update(updates)
+    .eq('id', id)
+    .select();
+  if (error) throw error;
+  return data[0];
+};
+
 export const getFundContributions = async () => {
   const { data, error } = await supabase
     .from('fund_contributions')

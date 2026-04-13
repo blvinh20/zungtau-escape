@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useNavigate } from 'react-router-dom';
 import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown, Flag, Eye, Camera, ShieldCheck } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution, deleteFundContribution } from '../lib/supabase';
@@ -9,6 +10,7 @@ import { useToast } from './Toast';
 import { useParticipants } from './ParticipantContext';
 
 export default function Expenses() {
+  const navigate = useNavigate();
   const { participants, treasurerId } = useParticipants();
   const [expenses, setExpenses] = useState<any[]>([]);
   const [fundContributions, setFundContributions] = useState<any[]>([]);
@@ -747,7 +749,7 @@ export default function Expenses() {
                   <button
                     onClick={() => {
                       setIsEndTripModalOpen(false);
-                      showToast('Đã chốt quyết toán thành công!', 'success');
+                      navigate('/settlement', { state: { expenses, fundContributions } });
                     }}
                     className="w-full bg-primary text-on-primary font-bold py-4.5 px-6 rounded-2xl shadow-xl shadow-primary/25 hover:bg-primary-container hover:shadow-primary/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 text-lg"
                   >
@@ -1044,7 +1046,7 @@ export default function Expenses() {
         treasurerId={treasurerId}
         onConfirmSettlement={() => {
           setIsSettlementOpen(false);
-          showToast('Đã chốt quyết toán thành công!', 'success');
+          navigate('/settlement', { state: { expenses, fundContributions } });
         }}
       />
     </div>
