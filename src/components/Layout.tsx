@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Settings, Compass, Wallet, Image as ImageIcon, UserPlus, X, Camera, Trash2, Pencil, ShieldCheck, Sun, Moon } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -8,6 +8,7 @@ import { Participant } from '../types';
 
 export default function Layout() {
   const navigate = useNavigate();
+  const loc = useLocation();
   const { participants, addParticipant, removeParticipant, updateAvatar, treasurerId, setTreasurerId } = useParticipants();
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -66,10 +67,10 @@ export default function Layout() {
             </NavLink>
             <NavLink
               to="/expenses"
-              className={({ isActive }) =>
+              className={() =>
                 cn(
                   "transition-colors duration-300",
-                  isActive ? "text-primary border-b-2 border-primary pb-1" : "text-secondary opacity-80 hover:text-primary"
+                  (loc.pathname === '/expenses' || loc.pathname === '/settlement') ? "text-primary border-b-2 border-primary pb-1" : "text-secondary opacity-80 hover:text-primary"
                 )
               }
             >
@@ -368,10 +369,10 @@ export default function Layout() {
         </NavLink>
         <NavLink
           to="/expenses"
-          className={({ isActive }) =>
+          className={() =>
             cn(
               "flex flex-col items-center justify-center px-4 py-1.5 transition-all duration-200 rounded-xl",
-              isActive ? "bg-primary text-on-primary" : "text-secondary hover:bg-surface-container"
+              (loc.pathname === '/expenses' || loc.pathname === '/settlement') ? "bg-primary text-on-primary" : "text-secondary hover:bg-surface-container"
             )
           }
         >

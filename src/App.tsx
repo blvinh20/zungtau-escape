@@ -4,6 +4,7 @@ import Layout from './components/Layout';
 import Itinerary from './components/Itinerary';
 import Expenses from './components/Expenses';
 import Memories from './components/Memories';
+import Settlement from './components/Settlement';
 import { ToastProvider } from './components/Toast';
 import ParticipantProvider from './components/ParticipantContext';
 
@@ -17,6 +18,7 @@ export default function App() {
               <Route index element={<Navigate to="/itinerary" replace />} />
               <Route path="itinerary" element={<Itinerary />} />
               <Route path="expenses" element={<Expenses />} />
+              <Route path="settlement" element={<Settlement />} />
               <Route path="memories" element={<Memories />} />
             </Route>
           </Routes>

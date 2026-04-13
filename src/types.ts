@@ -37,5 +37,6 @@ export interface Memory {
   caption: string;
   imageUrl: string;
   category: string;
+  album: string;
   aspectRatio?: string;
 }

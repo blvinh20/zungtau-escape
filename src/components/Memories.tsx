@@ -1,10 +1,35 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CloudUpload, Loader2, X, Trash2, Download, ChevronLeft, ChevronRight, Clock, ImagePlus, CheckCircle2, XCircle, Check } from 'lucide-react';
+import {
+  CloudUpload, Loader2, X, Trash2, Download, ChevronLeft, ChevronRight,
+  Clock, ImagePlus, Check, Sparkles, Waves, Utensils, MapPin, Users,
+  Image as ImageIcon, Camera, CheckSquare,
+} from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getMemories, addMemory as addMemorySupabase, uploadImage, deleteMemory as deleteMemorySupabase } from '../lib/supabase';
 import { useToast } from './Toast';
 import ConfirmModal from './ConfirmModal';
+
+// ── Album definitions ──
+
+interface AlbumDef {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  activeClass: string;
+  inactiveClass: string;
+}
+
+const ALBUMS: AlbumDef[] = [
+  { key: 'Tất cả', label: 'Tất cả', icon: <Sparkles size={14} />, activeClass: 'bg-primary text-white shadow-lg shadow-primary/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
+  { key: 'Biển', label: 'Biển', icon: <Waves size={14} />, activeClass: 'bg-blue-500 text-white shadow-lg shadow-blue-500/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
+  { key: 'Ẩm thực', label: 'Ẩm thực', icon: <Utensils size={14} />, activeClass: 'bg-orange-500 text-white shadow-lg shadow-orange-500/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
+  { key: 'Hoạt động', label: 'Hoạt động', icon: <MapPin size={14} />, activeClass: 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
+  { key: 'Nhóm', label: 'Nhóm', icon: <Users size={14} />, activeClass: 'bg-pink-500 text-white shadow-lg shadow-pink-500/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
+  { key: 'Khác', label: 'Khác', icon: <ImageIcon size={14} />, activeClass: 'bg-gray-500 text-white shadow-lg shadow-gray-500/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
+];
+
+// ── Date grouping ──
 
 interface DateGroup {
   key: string;
@@ -19,7 +44,6 @@ function groupByDate(memories: any[]): DateGroup[] {
   const yesterday = new Date(now.getTime() - 86400000).toDateString();
 
   const groups = new Map<string, any[]>();
-
   memories.forEach(m => {
     const date = new Date(m.created_at);
     const key = date.toDateString();
@@ -50,6 +74,16 @@ function groupByDate(memories: any[]): DateGroup[] {
   return result;
 }
 
+// ── Grid class helper ──
+
+function gridClass(count: number): string {
+  if (count <= 4) return 'grid-cols-2 md:grid-cols-4';
+  if (count <= 8) return 'grid-cols-3 md:grid-cols-4';
+  return 'grid-cols-3 md:grid-cols-6';
+}
+
+// ── Component ──
+
 export default function Memories() {
   const [memories, setMemories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +93,14 @@ export default function Memories() {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [activeAlbum, setActiveAlbum] = useState('Tất cả');
+  const [uploadAlbum, setUploadAlbum] = useState('Khác');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const gridAreaRef = useRef<HTMLDivElement>(null);
+
+  // Drag-select state
+  const [dragSelect, setDragSelect] = useState<{ active: boolean; startX: number; startY: number; currentX: number; currentY: number } | null>(null);
+  const photoRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -73,7 +114,13 @@ export default function Memories() {
 
   const [uploadFiles, setUploadFiles] = useState<{ file: File; preview: string; name: string }[]>([]);
 
-  const dateGroups = useMemo(() => groupByDate(memories), [memories]);
+  // Filter by album
+  const filteredMemories = useMemo(() => {
+    if (activeAlbum === 'Tất cả') return memories;
+    return memories.filter(m => (m.album || 'Khác') === activeAlbum);
+  }, [memories, activeAlbum]);
+
+  const dateGroups = useMemo(() => groupByDate(filteredMemories), [filteredMemories]);
 
   useEffect(() => {
     const fetchMemories = async () => {
@@ -113,7 +160,8 @@ export default function Memories() {
             title: name || 'Kỷ niệm mới',
             caption: 'Khoảnh khắc tuyệt vời',
             image_url: imageUrl,
-            aspect_ratio: 'aspect-square'
+            aspect_ratio: 'aspect-square',
+            album: uploadAlbum,
           });
         })
       );
@@ -189,7 +237,7 @@ export default function Memories() {
   };
 
   const selectAll = () => {
-    setSelectedIds(new Set(memories.map(m => m.id)));
+    setSelectedIds(new Set(filteredMemories.map(m => m.id)));
   };
 
   const clearSelection = () => {
@@ -215,23 +263,121 @@ export default function Memories() {
     }
   }, [showToast]);
 
-  const openLightbox = (index: number) => {
+  const openLightbox = (globalIndex: number) => {
     if (selectionMode) return;
-    setLightboxIndex(index);
+    setLightboxIndex(globalIndex);
   };
   const closeLightbox = () => setLightboxIndex(null);
   const goPrev = () => setLightboxIndex(prev => prev !== null ? Math.max(0, prev - 1) : null);
-  const goNext = () => setLightboxIndex(prev => prev !== null ? Math.min(memories.length - 1, prev + 1) : null);
-  const currentMemory = lightboxIndex !== null ? memories[lightboxIndex] : null;
+  const goNext = () => setLightboxIndex(prev => prev !== null ? Math.min(filteredMemories.length - 1, prev + 1) : null);
+  const currentMemory = lightboxIndex !== null ? filteredMemories[lightboxIndex] : null;
 
-  // Build flat index for lightbox
-  const flatPhotos = useMemo(() => memories, [memories]);
-  const getFlatIndex = (photo: any) => flatPhotos.findIndex(m => m.id === photo.id);
+  // Map photo -> global index in filteredMemories
+  const getGlobalIndex = (photo: any) => filteredMemories.findIndex(m => m.id === photo.id);
+
+  // ── Drag select helpers ──
+  const getRect = (drag: typeof dragSelect) => {
+    if (!drag) return null;
+    return {
+      left: Math.min(drag.startX, drag.currentX),
+      top: Math.min(drag.startY, drag.currentY),
+      right: Math.max(drag.startX, drag.currentX),
+      bottom: Math.max(drag.startY, drag.currentY),
+    };
+  };
+
+  const selectInRect = useCallback((rect: { left: number; top: number; right: number; bottom: number }) => {
+    const ids = new Set<string>();
+    photoRefs.current.forEach((el, id) => {
+      const box = el.getBoundingClientRect();
+      if (
+        box.left < rect.right &&
+        box.right > rect.left &&
+        box.top < rect.bottom &&
+        box.bottom > rect.top
+      ) {
+        ids.add(id);
+      }
+    });
+    setSelectedIds(ids);
+  }, []);
+
+  const handleDragStart = useCallback((clientX: number, clientY: number) => {
+    if (!selectionMode) setSelectionMode(true);
+    setDragSelect({ active: true, startX: clientX, startY: clientY, currentX: clientX, currentY: clientY });
+  }, [selectionMode]);
+
+  const handleDragMove = useCallback((clientX: number, clientY: number) => {
+    setDragSelect(prev => prev ? { ...prev, currentX: clientX, currentY: clientY } : null);
+  }, []);
+
+  const handleDragEnd = useCallback(() => {
+    if (dragSelect) {
+      const rect = getRect(dragSelect);
+      if (rect && (rect.right - rect.left > 10 || rect.bottom - rect.top > 10)) {
+        selectInRect(rect);
+      }
+    }
+    setDragSelect(null);
+  }, [dragSelect, selectInRect]);
+
+  // Mouse events for PC
+  const onMouseDown = (e: React.MouseEvent) => {
+    // Only start drag if not clicking on a photo card directly
+    if ((e.target as HTMLElement).closest('[data-photo-card]')) return;
+    if (e.button !== 0) return;
+    handleDragStart(e.clientX, e.clientY);
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (dragSelect?.active) handleDragMove(e.clientX, e.clientY);
+  };
+  const onMouseUp = () => {
+    if (dragSelect?.active) handleDragEnd();
+  };
+
+  // Touch events for mobile
+  const onTouchStart = (e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('[data-photo-card]')) return;
+    if (e.touches.length !== 1) return;
+    handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (dragSelect?.active && e.touches.length === 1) {
+      e.preventDefault();
+      handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
+    }
+  };
+  const onTouchEnd = () => {
+    if (dragSelect?.active) handleDragEnd();
+  };
+
+  // Also select during drag (live update)
+  useEffect(() => {
+    if (dragSelect?.active) {
+      const rect = getRect(dragSelect);
+      if (rect && (rect.right - rect.left > 5 || rect.bottom - rect.top > 5)) {
+        selectInRect(rect);
+      }
+    }
+  }, [dragSelect, selectInRect]);
+
+  // Click outside to deselect
+  useEffect(() => {
+    if (!selectionMode) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!gridAreaRef.current) return;
+      if (!gridAreaRef.current.contains(e.target as Node)) {
+        clearSelection();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [selectionMode]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-28 sm:pb-20">
-      {/* Header with background */}
-      <header className="relative mb-12 h-48 sm:h-64 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
+      {/* Header */}
+      <header className="relative mb-8 h-44 sm:h-56 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
         <div className="absolute inset-0 z-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem]">
           <img
             src="/images/background.png"
@@ -241,7 +387,7 @@ export default function Memories() {
           />
           <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />
         </div>
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
             <h1 className="text-4xl sm:text-6xl font-black tracking-tighter text-primary mb-2 font-headline">
               Kỷ niệm
@@ -253,57 +399,22 @@ export default function Memories() {
         </div>
       </header>
 
-      {/* Selection Toolbar */}
-      <AnimatePresence>
-        {selectionMode && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-16 left-0 right-0 z-[60] bg-primary text-white px-4 py-3 flex items-center justify-between shadow-lg"
+      {/* Album Filter Pills */}
+      <div className="flex flex-wrap gap-2 mb-8 px-1">
+        {ALBUMS.map(album => (
+          <button
+            key={album.key}
+            onClick={() => { setActiveAlbum(album.key); setSelectionMode(false); setSelectedIds(new Set()); }}
+            className={cn(
+              'px-4 py-2 rounded-full font-bold text-xs flex items-center gap-1.5 transition-all active:scale-95',
+              activeAlbum === album.key ? album.activeClass : album.inactiveClass
+            )}
           >
-            <div className="flex items-center gap-3">
-              <button onClick={clearSelection} className="p-1 hover:bg-white/20 rounded-full transition-colors">
-                <X size={22} />
-              </button>
-              <span className="font-bold">
-                {selectedIds.size > 0 ? `Đã chọn ${selectedIds.size}` : 'Chọn ảnh'}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={selectAll}
-                className="text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors"
-              >
-                Chọn tất cả
-              </button>
-              {selectedIds.size > 0 && (
-                <>
-                  <button
-                    onClick={async () => {
-                      for (const id of selectedIds) {
-                        const m = memories.find(mem => mem.id === id);
-                        if (m) await handleDownload(m.image_url || m.imageUrl, m.title);
-                      }
-                    }}
-                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    <Download size={14} />
-                    Lưu
-                  </button>
-                  <button
-                    onClick={handleBatchDelete}
-                    className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-                  >
-                    <Trash2 size={14} />
-                    Xóa ({selectedIds.size})
-                  </button>
-                </>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {album.icon}
+            {album.label}
+          </button>
+        ))}
+      </div>
 
       {/* Hidden File Input */}
       <input
@@ -350,26 +461,49 @@ export default function Memories() {
                   <X size={20} />
                 </button>
               </div>
-              <div className="p-6 max-h-[50vh] overflow-y-auto">
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                  {uploadFiles.map((f, i) => (
-                    <div key={i} className="space-y-2">
-                      <div className="aspect-square rounded-2xl overflow-hidden bg-surface-container-low">
-                        <img src={f.preview} alt="" className="w-full h-full object-cover" />
+              <div className="p-6 space-y-4">
+                {/* Album selector */}
+                <div>
+                  <label className="text-xs font-bold text-secondary uppercase tracking-widest ml-1 mb-2 block">Album</label>
+                  <div className="flex flex-wrap gap-2">
+                    {ALBUMS.filter(a => a.key !== 'Tất cả').map(album => (
+                      <button
+                        key={album.key}
+                        onClick={() => setUploadAlbum(album.key)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-full font-bold text-xs flex items-center gap-1.5 transition-all',
+                          uploadAlbum === album.key ? album.activeClass : album.inactiveClass
+                        )}
+                      >
+                        {album.icon}
+                        {album.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Preview grid */}
+                <div className="max-h-[40vh] overflow-y-auto">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {uploadFiles.map((f, i) => (
+                      <div key={i} className="space-y-2">
+                        <div className="aspect-square rounded-2xl overflow-hidden bg-surface-container-low">
+                          <img src={f.preview} alt="" className="w-full h-full object-cover" />
+                        </div>
+                        <input
+                          type="text"
+                          value={f.name}
+                          onChange={(e) => {
+                            const updated = [...uploadFiles];
+                            updated[i] = { ...updated[i], name: e.target.value };
+                            setUploadFiles(updated);
+                          }}
+                          placeholder="Tên ảnh..."
+                          className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
+                        />
                       </div>
-                      <input
-                        type="text"
-                        value={f.name}
-                        onChange={(e) => {
-                          const updated = [...uploadFiles];
-                          updated[i] = { ...updated[i], name: e.target.value };
-                          setUploadFiles(updated);
-                        }}
-                        placeholder="Tên ảnh..."
-                        className="w-full bg-surface-container-low border-none rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-primary"
-                      />
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="p-6 bg-surface-container-low flex gap-3">
@@ -393,7 +527,7 @@ export default function Memories() {
         )}
       </AnimatePresence>
 
-      {/* Lightbox */}
+      {/* Lightbox — chỉ close + prev/next */}
       <AnimatePresence>
         {lightboxIndex !== null && currentMemory && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -408,7 +542,7 @@ export default function Memories() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="relative z-10 w-full h-full flex flex-col items-center justify-center p-4 md:p-10"
+              className="relative z-10 w-full h-full flex items-center justify-center p-4 md:p-10"
             >
               <button
                 onClick={closeLightbox}
@@ -417,11 +551,11 @@ export default function Memories() {
                 <X size={24} />
               </button>
 
-              <div className="relative max-w-4xl w-full max-h-[70vh] flex items-center justify-center">
+              <div className="relative max-w-4xl w-full max-h-[80vh] flex items-center justify-center">
                 <img
                   src={currentMemory.image_url || currentMemory.imageUrl}
                   alt={currentMemory.title}
-                  className="max-w-full max-h-[70vh] object-contain rounded-2xl shadow-2xl"
+                  className="max-w-full max-h-[80vh] object-contain rounded-2xl shadow-2xl"
                   referrerPolicy="no-referrer"
                 />
               </div>
@@ -434,7 +568,7 @@ export default function Memories() {
                   <ChevronLeft size={28} />
                 </button>
               )}
-              {lightboxIndex < memories.length - 1 && (
+              {lightboxIndex < filteredMemories.length - 1 && (
                 <button
                   onClick={goNext}
                   className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 p-3 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-all z-20"
@@ -442,24 +576,6 @@ export default function Memories() {
                   <ChevronRight size={28} />
                 </button>
               )}
-
-              {/* Info bar */}
-              <div className="flex items-center gap-4 text-white/60 mt-4 z-20">
-                <span className="text-sm font-bold">{lightboxIndex + 1} / {memories.length}</span>
-                {currentMemory.title && <span className="text-sm truncate max-w-[200px]">• {currentMemory.title}</span>}
-                <button
-                  onClick={() => handleDownload(currentMemory.image_url || currentMemory.imageUrl, currentMemory.title)}
-                  className="p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-                >
-                  <Download size={16} />
-                </button>
-                <button
-                  onClick={() => handleDeleteMemory(currentMemory.id)}
-                  className="p-2 bg-red-500/40 hover:bg-red-500/60 rounded-full transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
             </motion.div>
           </div>
         )}
@@ -471,106 +587,207 @@ export default function Memories() {
           <Loader2 className="animate-spin mb-4" size={48} />
           <p className="font-bold">Đang tải kỷ niệm...</p>
         </div>
-      ) : memories.length === 0 ? (
+      ) : filteredMemories.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-secondary">
           <ImagePlus size={64} className="opacity-30 mb-4" />
           <p className="font-bold text-lg mb-1">Chưa có kỷ niệm nào</p>
-          <p className="text-sm opacity-60">Nhấn nút + để bắt đầu lưu giữ khoảnh khắc</p>
+          <p className="text-sm opacity-60">
+            {activeAlbum === 'Tất cả'
+              ? 'Nhấn nút + để bắt đầu lưu giữ khoảnh khắc'
+              : `Chưa có ảnh trong album "${activeAlbum}"`}
+          </p>
         </div>
       ) : (
-        <div className="space-y-10">
-          {dateGroups.map(group => (
-            <section key={group.key}>
-              {/* Date Header */}
-              <div className="flex items-baseline justify-between mb-4 px-1">
-                <div>
-                  <h3 className="text-lg font-headline font-bold text-on-surface">{group.label}</h3>
-                  <p className="text-xs text-on-surface-variant">{group.sublabel}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold text-on-surface-variant">{group.photos.length} ảnh</span>
-                  {!selectionMode && (
-                    <button
-                      onClick={() => setSelectionMode(true)}
-                      className="text-primary font-bold text-xs hover:bg-primary/10 px-3 py-1 rounded-lg transition-colors"
-                    >
-                      Chọn
+        <div
+          ref={gridAreaRef}
+          className="relative select-none"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
+          {/* Drag selection rectangle */}
+          {dragSelect?.active && (() => {
+            const rect = getRect(dragSelect);
+            if (!rect) return null;
+            return (
+              <div
+                className="fixed z-[55] border-2 border-primary bg-primary/10 rounded-lg pointer-events-none"
+                style={{
+                  left: rect.left,
+                  top: rect.top,
+                  width: rect.right - rect.left,
+                  height: rect.bottom - rect.top,
+                }}
+              />
+            );
+          })()}
+
+          {/* Inline Selection Toolbar */}
+            <AnimatePresence>
+              {selectionMode && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  animate={{ opacity: 1, height: 'auto', marginBottom: 16 }}
+                  exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                  className="sticky top-16 z-[60] bg-primary text-white px-4 py-3 flex items-center justify-between shadow-lg rounded-2xl overflow-hidden"
+                >
+                  <div className="flex items-center gap-3">
+                    <button onClick={clearSelection} className="p-1 hover:bg-white/20 rounded-full transition-colors">
+                      <X size={22} />
                     </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Photo Grid */}
-              <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-1.5 sm:gap-2">
-                {group.photos.map((memory, index) => {
-                  const isFirst = index === 0;
-                  const isSelected = selectedIds.has(memory.id);
-                  const flatIdx = getFlatIndex(memory);
-
-                  return (
-                    <motion.div
-                      key={memory.id}
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: index * 0.03 }}
-                      onClick={() => {
-                        if (selectionMode) {
-                          toggleSelect(memory.id);
-                        } else {
-                          openLightbox(flatIdx);
-                        }
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        if (!selectionMode) {
-                          setSelectionMode(true);
-                          toggleSelect(memory.id);
-                        }
-                      }}
-                      className={cn(
-                        "relative cursor-pointer group overflow-hidden rounded-lg sm:rounded-xl",
-                        isFirst && "col-span-2 row-span-2",
-                        selectionMode && isSelected && "ring-3 ring-primary ring-offset-2 ring-offset-background"
-                      )}
+                    <span className="font-bold">
+                      {selectedIds.size > 0 ? `Đã chọn ${selectedIds.size}` : 'Chọn ảnh'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={selectAll}
+                      className="text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors"
                     >
-                      <div className={cn(
-                        "bg-surface-container-low",
-                        isFirst ? "aspect-square" : "aspect-square"
-                      )}>
-                        <img
-                          src={memory.image_url || memory.imageUrl}
-                          alt={memory.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          referrerPolicy="no-referrer"
-                        />
-                      </div>
+                      Chọn tất cả
+                    </button>
+                    {selectedIds.size > 0 && (
+                      <>
+                        <button
+                          onClick={async () => {
+                            for (const id of selectedIds) {
+                              const m = memories.find(mem => mem.id === id);
+                              if (m) await handleDownload(m.image_url || m.imageUrl, m.title);
+                            }
+                          }}
+                          className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                        >
+                          <Download size={14} />
+                          Lưu
+                        </button>
+                        <button
+                          onClick={handleBatchDelete}
+                          className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+                        >
+                          <Trash2 size={14} />
+                          Xóa ({selectedIds.size})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-                      {/* Selection Checkbox */}
-                      {selectionMode && (
-                        <div className={cn(
-                          "absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all",
-                          isSelected ? "bg-primary" : "bg-black/30 group-hover:bg-black/50"
-                        )}>
-                          {isSelected ? <Check size={14} className="text-white" /> : <div className="w-3 h-3 rounded-full border-2 border-white/60" />}
-                        </div>
-                      )}
-
-                      {/* Hover Overlay (non-selection mode) */}
+            <div className="space-y-10">
+            {dateGroups.map(group => {
+              const count = group.photos.length;
+              const isFirstFeatured = count >= 3;
+              return (
+                <section key={group.key}>
+                  {/* Date Header */}
+                  <div className="flex items-baseline justify-between mb-4 px-1">
+                    <div>
+                      <h3 className="text-lg font-headline font-bold text-on-surface">{group.label}</h3>
+                      <p className="text-xs text-on-surface-variant">{group.sublabel}</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-on-surface-variant">{count} ảnh</span>
                       {!selectionMode && (
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-end p-2 sm:p-3">
-                          <p className={cn("text-white font-bold truncate", isFirst ? "text-sm sm:text-base" : "text-[11px]")}>{memory.title}</p>
-                          <p className="text-white/70 text-[10px] flex items-center gap-1 mt-0.5">
-                            <Clock size={10} />
-                            {memory.created_at && new Date(memory.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        </div>
+                        <button
+                          onClick={() => setSelectionMode(true)}
+                          className="text-primary font-bold text-xs hover:bg-primary/10 px-3 py-1 rounded-lg transition-colors"
+                        >
+                          Chọn
+                        </button>
                       )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </section>
-          ))}
+                    </div>
+                  </div>
+
+                  {/* Photo Grid */}
+                  <div className={cn('grid gap-1.5 sm:gap-2 md:gap-3', gridClass(count))}>
+                    {group.photos.map((memory, index) => {
+                      const isSelected = selectedIds.has(memory.id);
+                      const globalIdx = getGlobalIndex(memory);
+                      const isFirst = isFirstFeatured && index === 0;
+
+                      return (
+                        <motion.div
+                          key={memory.id}
+                          data-photo-card
+                          ref={el => {
+                            if (el) photoRefs.current.set(memory.id, el);
+                            else photoRefs.current.delete(memory.id);
+                          }}
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: index * 0.03 }}
+                          onClick={() => {
+                            if (selectionMode) {
+                              toggleSelect(memory.id);
+                            } else {
+                              openLightbox(globalIdx);
+                            }
+                          }}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            if (!selectionMode) {
+                              setSelectionMode(true);
+                              toggleSelect(memory.id);
+                            }
+                          }}
+                          className={cn(
+                            "relative cursor-pointer group overflow-hidden rounded-xl sm:rounded-2xl aspect-square",
+                            isFirst && "col-span-2 row-span-2",
+                            selectionMode && isSelected && "ring-3 ring-primary ring-offset-2 ring-offset-background"
+                          )}
+                        >
+                          <img
+                            src={memory.image_url || memory.imageUrl}
+                            alt={memory.title}
+                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                            referrerPolicy="no-referrer"
+                          />
+
+                          {/* Selection Checkbox */}
+                          {selectionMode && (
+                            <div className={cn(
+                              "absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all",
+                              isSelected ? "bg-primary" : "bg-black/30 group-hover:bg-black/50"
+                            )}>
+                              {isSelected ? <Check size={14} className="text-white" /> : <div className="w-3 h-3 rounded-full border-2 border-white/60" />}
+                            </div>
+                          )}
+
+                          {/* Hover Overlay (non-selection mode) */}
+                          {!selectionMode && (
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3">
+                              {/* Select button at top-right */}
+                              <div className="flex justify-end">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectionMode(true); toggleSelect(memory.id); }}
+                                  className="text-white/90 font-bold text-[10px] bg-white/20 hover:bg-white/30 backdrop-blur-sm px-2.5 py-1 rounded-lg transition-colors"
+                                >
+                                  Chọn
+                                </button>
+                              </div>
+                              {/* Title + time at bottom */}
+                              <div>
+                                <p className={cn("text-white font-bold truncate", isFirst ? "text-sm" : "text-[11px]")}>{memory.title}</p>
+                                <p className="text-white/70 text-[10px] flex items-center gap-1 mt-0.5">
+                                  <Clock size={10} />
+                                  {memory.created_at && new Date(memory.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </motion.div>
+                      );
+                    })}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -584,26 +801,17 @@ export default function Memories() {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
             className={cn(
-              "fixed z-50 w-14 h-14 rounded-full bg-primary text-white shadow-xl shadow-primary/30",
+              "fixed z-50 w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-primary-container text-white shadow-xl shadow-primary/30",
               "hover:brightness-110 active:scale-90 transition-all duration-200",
               "flex items-center justify-center",
               "right-4 bottom-24 sm:right-8 sm:bottom-8",
               uploading && "opacity-70 cursor-not-allowed"
             )}
           >
-            {uploading ? <Loader2 className="animate-spin" size={24} /> : <Plus size={24} />}
+            {uploading ? <Loader2 className="animate-spin" size={24} /> : <Camera size={24} />}
           </motion.button>
         )}
       </AnimatePresence>
     </div>
-  );
-}
-
-// Simple plus icon for FAB
-function Plus({ size = 24, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12 5v14" /><path d="M5 12h14" />
-    </svg>
   );
 }

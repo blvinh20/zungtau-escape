@@ -79,37 +79,31 @@ export function computeMemberBalances(
   });
 }
 
-export function computePaymentPlan(balances: MemberBalance[]): PaymentTransaction[] {
-  const creditors = balances
-    .filter(b => b.balance > 0)
-    .map(b => ({ ...b, remaining: b.balance }))
-    .sort((a, b) => b.remaining - a.remaining);
-
-  const debtors = balances
-    .filter(b => b.balance < 0)
-    .map(b => ({ ...b, remaining: Math.abs(b.balance) }))
-    .sort((a, b) => b.remaining - a.remaining);
+export function computePaymentPlan(balances: MemberBalance[], treasurerId: string): PaymentTransaction[] {
+  const treasurer = balances.find(b => b.isTreasurer);
+  if (!treasurer) return [];
 
   const transactions: PaymentTransaction[] = [];
-  let i = 0;
-  let j = 0;
 
-  while (i < creditors.length && j < debtors.length) {
-    const amount = Math.min(creditors[i].remaining, debtors[j].remaining);
+  for (const m of balances) {
+    if (m.isTreasurer) continue;
+    if (Math.abs(m.balance) < 1) continue;
 
-    if (amount > 0) {
+    if (m.balance < 0) {
+      // Nợ → nộp thêm cho thủ quỹ
       transactions.push({
-        from: { id: debtors[j].id, name: debtors[j].name, initials: debtors[j].initials, avatarUrl: debtors[j].avatarUrl, colorClass: debtors[j].colorClass },
-        to: { id: creditors[i].id, name: creditors[i].name, initials: creditors[i].initials, avatarUrl: creditors[i].avatarUrl, colorClass: creditors[i].colorClass },
-        amount: Math.round(amount),
+        from: { id: m.id, name: m.name, initials: m.initials, avatarUrl: m.avatarUrl, colorClass: m.colorClass },
+        to: { id: treasurer.id, name: treasurer.name, initials: treasurer.initials, avatarUrl: treasurer.avatarUrl, colorClass: treasurer.colorClass },
+        amount: Math.abs(Math.round(m.balance)),
+      });
+    } else {
+      // Thừa → thủ quỹ refund
+      transactions.push({
+        from: { id: treasurer.id, name: treasurer.name, initials: treasurer.initials, avatarUrl: treasurer.avatarUrl, colorClass: treasurer.colorClass },
+        to: { id: m.id, name: m.name, initials: m.initials, avatarUrl: m.avatarUrl, colorClass: m.colorClass },
+        amount: Math.round(m.balance),
       });
     }
-
-    creditors[i].remaining -= amount;
-    debtors[j].remaining -= amount;
-
-    if (creditors[i].remaining < 1) i++;
-    if (debtors[j].remaining < 1) j++;
   }
 
   return transactions;
