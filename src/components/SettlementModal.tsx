@@ -156,7 +156,9 @@ export default function SettlementModal({
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
         className="relative bg-surface-container-lowest w-full max-w-4xl max-h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col"
       >
-        {/* Header */}
+
+
+        {/* Header with back */}
         <div className="flex items-center justify-between p-4 border-b border-outline-variant/10 shrink-0 bg-surface-container">
           <button
             onClick={onClose}
@@ -165,7 +167,7 @@ export default function SettlementModal({
             <ArrowLeft size={18} />
             <span className="text-sm">Quay lại</span>
           </button>
-          <h2 className="text-lg font-black font-headline text-on-surface">Quyết toán Chuyến đi</h2>
+          <div></div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-surface-container rounded-full text-on-surface-variant hover:text-on-surface transition-colors"

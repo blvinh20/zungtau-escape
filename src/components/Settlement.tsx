@@ -148,6 +148,17 @@ export default function Settlement() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4 sm:pt-8 pb-28">
+      {/* Header with back */}
+      <div className="flex items-center justify-between mb-4">
+        <button
+          onClick={() => navigate('/expenses')}
+          className="flex items-center gap-2 text-primary font-bold hover:bg-primary/10 px-3 py-2 rounded-xl transition-colors"
+        >
+          <ArrowLeft size={18} />
+          <span className="text-sm">Quay lại</span>
+        </button>
+      </div>
+
       {/* Hero Banner */}
       <motion.section
         initial={{ opacity: 0, y: 20 }}
@@ -244,10 +255,7 @@ export default function Settlement() {
           <div>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-black font-headline">Chi tiết thành viên</h2>
-              <p className="text-[10px] font-bold text-secondary uppercase tracking-widest">
-                Bình quân: <span className="text-primary">{formatCurrency(sharePerPerson)}đ</span> / người
-              </p>
-            </div>
+                          </div>
             <div className="bg-surface-container-lowest rounded-[2rem] shadow-sm border border-outline-variant/10 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[520px] text-left border-collapse">
