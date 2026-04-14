@@ -1,74 +1,106 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@700;800;900&family=Manrope:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,700;1,6..72,400;1,6..72,700&family=Manrope:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@700;800;900&display=swap');
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
+  /* The Island Curator Typography */
+  --font-serif: "Newsreader", Georgia, serif;
   --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
-  --font-headline: "Plus Jakarta Sans", sans-serif;
+  --font-headline: "Newsreader", serif;
+  --font-display: "Plus Jakarta Sans", sans-serif;
 
-  --color-primary: #005e97;
-  --color-primary-container: #0077be;
+  /* Core Palette - Phú Quý Inspired */
+  /* Primary: Deep emerald sea (#00556f) */
+  --color-primary: #00556f;
+  --color-primary-container: #0f6f8e;
   --color-on-primary: #ffffff;
+  --color-primary-fixed-dim: #7ab8d8;
 
-  --color-secondary: #6d5e00;
-  --color-secondary-container: #fddc1b;
-  --color-on-secondary-container: #706000;
+  /* Secondary: Volcanic (#9b4500) */
+  --color-secondary: #9b4500;
+  --color-secondary-container: #d4a574;
+  --color-on-secondary: #ffffff;
 
-  --color-tertiary: #8b4800;
-  --color-tertiary-fixed: #ffdcc4;
+  /* Tertiary: Sun-drenched sands (#6e5d00) */
+  --color-tertiary: #6e5d00;
+  --color-tertiary-container: #c4b47c;
+  --color-on-tertiary: #ffffff;
 
-  --color-background: #fdfae7;
-  --color-surface: #fdfae7;
-  --color-surface-container: #f1eedb;
-  --color-surface-container-low: #f7f4e1;
-  --color-surface-container-high: #ece9d6;
+  /* Surface Hierarchy - Magazine Feel */
+  /* Level 0: Foundation - warm sand */
+  --color-background: #fbf9f1;
+  --color-surface: #fbf9f1;
+
+  /* Level 1: The Page */
+  --color-surface-container-low: #f5f4ec;
+  --color-surface-container: #eeecd9;
+
+  /* Level 2: The Inset */
+  --color-surface-container-high: #e5e3d3;
+
+  /* Level 3: The Focus - brilliant white */
   --color-surface-container-lowest: #ffffff;
 
-  --color-on-surface: #1c1c11;
-  --color-on-surface-variant: #404751;
+  /* On Surface - ink-on-paper (no pure black) */
+  --color-on-surface: #1b1c17;
+  --color-on-surface-variant: #5a5a52;
 
-  --color-outline-variant: #c0c7d2;
+  --color-outline-variant: #c5c7be;
 
   --color-error: #ba1a1a;
 
-  --radius-xl: 1.5rem;
+  /* Sharp corners - 0.25rem = 4px */
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
   --radius-lg: 1rem;
-  --radius-md: 0.75rem;
-}
-
-/* Dark mode overrides */
-.dark {
-  --color-primary: #7dd3fc;
-  --color-primary-container: #004a79;
-  --color-on-primary: #003355;
-
-  --color-secondary: #fddc1b;
-  --color-secondary-container: #524600;
-  --color-on-secondary-container: #ffe24f;
-
-  --color-tertiary: #ffb77f;
-  --color-tertiary-fixed: #ffdcc4;
-
-  --color-background: #111110;
-  --color-surface: #181816;
-  --color-surface-container: #1f1f1c;
-  --color-surface-container-low: #1b1b18;
-  --color-surface-container-high: #292926;
-  --color-surface-container-lowest: #0c0c0a;
-
-  --color-on-surface: #e6e3d0;
-  --color-on-surface-variant: #c3c0b0;
-
-  --color-outline-variant: #444438;
-
-  --color-error: #ffb4ab;
+  --radius-xl: 1.5rem;
+  --radius-2xl: 2rem;
 }
 
 @layer base {
   body {
-    @apply bg-background text-on-surface font-sans transition-colors duration-300;
+    @apply bg-background text-on-surface font-sans antialiased;
+    /* Soft easing for all transitions - gentle water flow */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
+
+  /* Headlines use Newsreader for editorial feel */
+  h1, h2, h3, .font-headline, .hero-title {
+    @apply font-serif;
+    letter-spacing: -0.02em;
+  }
+
+  /* Display text uses Plus Jakarta Sans */
+  .font-display {
+    @apply font-display;
+  }
+}
+
+/* Glassmorphism - for floating navigation */
+.glass {
+  @apply bg-surface/80 backdrop-blur-2xl;
+  -webkit-backdrop-filter: blur(24px);
+}
+
+/* Ghost Border - subtle border instead of full lines */
+.ghost-border {
+  @apply border border-outline-variant/15;
+}
+
+/* No-line rule - use background shifts instead of borders */
+.section-surface {
+  @apply bg-surface-container-low;
+}
+
+.section-surface-alt {
+  @apply bg-surface-container-high;
+}
+
+/* Featured photo corners - keep sharp */
+.featured-photo {
+  @apply rounded-sm;
 }
 
 .scrollbar-hide::-webkit-scrollbar {
@@ -79,7 +111,7 @@
   scrollbar-width: none;
 }
 
-/* Fix select dropdown being clipped inside rounded/overflow-hidden modals */
+/* Fix select dropdown */
 select {
   position: relative;
   z-index: 1;
@@ -94,12 +126,22 @@ select option {
   padding: 8px;
 }
 
-.breeze-mask {
-  border-top-left-radius: 1.5rem;
+/* Smooth easing animation curve - gentle water flow */
+.smooth {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.hero-bg {
-    background-image: linear-gradient(to bottom, rgba(253, 250, 231, 0.4), rgba(253, 250, 231, 1)), url(https://lh3.googleusercontent.com/aida/ADBb0ugHn5tyTSjxE24b5woMTAnhz0k5Qy2RB8cSphJisQjBj1nZGwtheJvIQgDWkPSd7PSWpZr8exs0v-z6O3kn7R8C8LiK711IwiO0bN8euKo7lLrbeOX78TeeD656rNGEhXm9yHzL2nMpoRmbhipxjPXq-I15yTvRSCXoFiWJZPEbr0NRbJX7a3vZxCY3SqBdLYRFOrrZ-VJYxCwAKUPYW3YubEDmA-ptEX6S7Nn-rXOwyMldqOfccBtrb29EwvdFjOd6t9tP7yzeJA);
-    background-size: cover;
-    background-position: center;
+/* Inset container for cards */
+.inset-card {
+  @apply bg-surface-container-lowest shadow-sm;
+}
+
+/* Featured image aspect ratio 4:5 */
+.aspect-portrait {
+  aspect-ratio: 4 / 5;
+}
+
+/* Featured image aspect ratio 2:3 */
+.aspect-magazine {
+  aspect-ratio: 2 / 3;
 }
