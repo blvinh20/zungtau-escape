@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { Participant } from '../types';
-import { getParticipants, addParticipant as addParticipantSupabase, deleteParticipant as deleteParticipantSupabase, updateParticipant as updateParticipantSupabase, uploadImage } from '../lib/supabase';
+import { getParticipants, addParticipant as addParticipantSupabase, deleteParticipant as deleteParticipantSupabase, updateParticipant as updateParticipantSupabase, uploadImage, getTreasurerId as getTreasurerIdDB, setTreasurerId as setTreasurerIdDB } from '../lib/supabase';
 import { useToast } from './Toast';
 
 interface ParticipantContextType {
@@ -31,13 +31,36 @@ const sortByName = (list: Participant[]) =>
 export default function ParticipantProvider({ children }: { children: React.ReactNode }) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
-  const [treasurerId, setTreasurerIdRaw] = useState(() => {
-    try { return localStorage.getItem('treasurerId') || ''; } catch { return ''; }
-  });
+  const [treasurerId, setTreasurerIdRaw] = useState('');
   const { showToast } = useToast();
 
-  const setTreasurerId = (id: string) => {
+  // Load treasurerId from database on mount
+  useEffect(() => {
+    const fetchTreasurer = async () => {
+      try {
+        const id = await getTreasurerIdDB();
+        setTreasurerIdRaw(id);
+      } catch (error) {
+        console.error('Error fetching treasurer from DB:', error);
+        // Fallback to localStorage
+        try {
+          const localId = localStorage.getItem('treasurerId') || '';
+          setTreasurerIdRaw(localId);
+        } catch {}
+      }
+    };
+    fetchTreasurer();
+  }, []);
+
+  const setTreasurerId = async (id: string) => {
     setTreasurerIdRaw(id);
+    // Save to database
+    try {
+      await setTreasurerIdDB(id);
+    } catch (error) {
+      console.error('Error saving treasurer to DB:', error);
+    }
+    // Also save to localStorage as fallback
     try { localStorage.setItem('treasurerId', id); } catch {}
   };
 
@@ -93,7 +116,11 @@ export default function ParticipantProvider({ children }: { children: React.Reac
     try {
       await deleteParticipantSupabase(id);
       setParticipants(prev => prev.filter(p => p.id !== id));
-      if (treasurerId === id) { setTreasurerIdRaw(''); try { localStorage.removeItem('treasurerId'); } catch {} }
+      if (treasurerId === id) {
+        setTreasurerId('');
+        try { localStorage.removeItem('treasurerId'); } catch {}
+        try { await setTreasurerIdDB(''); } catch {}
+      }
       showToast('Xóa thành viên thành công', 'success');
     } catch (error) {
       console.error('Error removing participant:', error);

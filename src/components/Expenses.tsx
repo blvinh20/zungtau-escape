@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution, deleteFundContribution } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
 import SettlementPreview from './SettlementPreview';
+import SettlementModal from './SettlementModal';
 import { useToast } from './Toast';
 import { useParticipants } from './ParticipantContext';
 
@@ -19,6 +20,7 @@ export default function Expenses() {
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
   const [isEndTripModalOpen, setIsEndTripModalOpen] = useState(false);
   const [isSettlementOpen, setIsSettlementOpen] = useState(false);
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
   const [isFundModalOpen, setIsFundModalOpen] = useState(false);
   const [isFundAddOpen, setIsFundAddOpen] = useState(false);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
@@ -294,12 +296,12 @@ export default function Expenses() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-20">
-      <header className="relative mb-8 sm:mb-16 h-48 sm:h-72 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
+      <header className="group relative mb-8 sm:mb-16 h-48 sm:h-72 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
         <div className="absolute inset-0 z-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem]">
           <img
             src="/images/background.png"
             alt="Expenses Background"
-            className="w-full h-full object-cover opacity-50"
+            className="w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-700"
             referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />
@@ -560,11 +562,11 @@ export default function Expenses() {
                   <span className="sm:hidden">Thêm</span>
                 </button>
                 <button
-                  onClick={() => setIsEndTripModalOpen(true)}
+                  onClick={() => setIsSettlementModalOpen(true)}
                   className="flex items-center gap-2 bg-[#ffdc2e] text-on-surface-variant px-4 sm:px-8 py-3 sm:py-4 rounded-2xl font-black shadow-xl shadow-[#ffdc2e]/20 hover:brightness-110 active:scale-95 transition-all text-sm sm:text-base"
                 >
                   <CheckCircle2 size={20} />
-                  Kết thúc hành trình
+                  Quyết toán
                 </button>
               </div>
             </div>
@@ -1048,6 +1050,16 @@ export default function Expenses() {
           setIsSettlementOpen(false);
           navigate('/settlement', { state: { expenses, fundContributions } });
         }}
+      />
+
+      {/* Settlement Modal */}
+      <SettlementModal
+        isOpen={isSettlementModalOpen}
+        onClose={() => setIsSettlementModalOpen(false)}
+        participants={participants}
+        expenses={expenses}
+        fundContributions={fundContributions}
+        treasurerId={treasurerId}
       />
     </div>
   );

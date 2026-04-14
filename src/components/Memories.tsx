@@ -98,9 +98,7 @@ export default function Memories() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const gridAreaRef = useRef<HTMLDivElement>(null);
 
-  // Drag-select state
-  const [dragSelect, setDragSelect] = useState<{ active: boolean; startX: number; startY: number; currentX: number; currentY: number } | null>(null);
-  const photoRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -275,92 +273,6 @@ export default function Memories() {
   // Map photo -> global index in filteredMemories
   const getGlobalIndex = (photo: any) => filteredMemories.findIndex(m => m.id === photo.id);
 
-  // ── Drag select helpers ──
-  const getRect = (drag: typeof dragSelect) => {
-    if (!drag) return null;
-    return {
-      left: Math.min(drag.startX, drag.currentX),
-      top: Math.min(drag.startY, drag.currentY),
-      right: Math.max(drag.startX, drag.currentX),
-      bottom: Math.max(drag.startY, drag.currentY),
-    };
-  };
-
-  const selectInRect = useCallback((rect: { left: number; top: number; right: number; bottom: number }) => {
-    const ids = new Set<string>();
-    photoRefs.current.forEach((el, id) => {
-      const box = el.getBoundingClientRect();
-      if (
-        box.left < rect.right &&
-        box.right > rect.left &&
-        box.top < rect.bottom &&
-        box.bottom > rect.top
-      ) {
-        ids.add(id);
-      }
-    });
-    setSelectedIds(ids);
-  }, []);
-
-  const handleDragStart = useCallback((clientX: number, clientY: number) => {
-    if (!selectionMode) setSelectionMode(true);
-    setDragSelect({ active: true, startX: clientX, startY: clientY, currentX: clientX, currentY: clientY });
-  }, [selectionMode]);
-
-  const handleDragMove = useCallback((clientX: number, clientY: number) => {
-    setDragSelect(prev => prev ? { ...prev, currentX: clientX, currentY: clientY } : null);
-  }, []);
-
-  const handleDragEnd = useCallback(() => {
-    if (dragSelect) {
-      const rect = getRect(dragSelect);
-      if (rect && (rect.right - rect.left > 10 || rect.bottom - rect.top > 10)) {
-        selectInRect(rect);
-      }
-    }
-    setDragSelect(null);
-  }, [dragSelect, selectInRect]);
-
-  // Mouse events for PC
-  const onMouseDown = (e: React.MouseEvent) => {
-    // Only start drag if not clicking on a photo card directly
-    if ((e.target as HTMLElement).closest('[data-photo-card]')) return;
-    if (e.button !== 0) return;
-    handleDragStart(e.clientX, e.clientY);
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (dragSelect?.active) handleDragMove(e.clientX, e.clientY);
-  };
-  const onMouseUp = () => {
-    if (dragSelect?.active) handleDragEnd();
-  };
-
-  // Touch events for mobile
-  const onTouchStart = (e: React.TouchEvent) => {
-    if ((e.target as HTMLElement).closest('[data-photo-card]')) return;
-    if (e.touches.length !== 1) return;
-    handleDragStart(e.touches[0].clientX, e.touches[0].clientY);
-  };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (dragSelect?.active && e.touches.length === 1) {
-      e.preventDefault();
-      handleDragMove(e.touches[0].clientX, e.touches[0].clientY);
-    }
-  };
-  const onTouchEnd = () => {
-    if (dragSelect?.active) handleDragEnd();
-  };
-
-  // Also select during drag (live update)
-  useEffect(() => {
-    if (dragSelect?.active) {
-      const rect = getRect(dragSelect);
-      if (rect && (rect.right - rect.left > 5 || rect.bottom - rect.top > 5)) {
-        selectInRect(rect);
-      }
-    }
-  }, [dragSelect, selectInRect]);
-
   // Click outside to deselect
   useEffect(() => {
     if (!selectionMode) return;
@@ -377,12 +289,12 @@ export default function Memories() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 pb-28 sm:pb-20">
       {/* Header */}
-      <header className="relative mb-8 h-44 sm:h-56 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
+      <header className="group relative mb-8 h-44 sm:h-56 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
         <div className="absolute inset-0 z-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem]">
           <img
             src="/images/background.png"
             alt="Memories Background"
-            className="w-full h-full object-cover opacity-50"
+            className="w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-700"
             referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />
@@ -600,31 +512,8 @@ export default function Memories() {
       ) : (
         <div
           ref={gridAreaRef}
-          className="relative select-none"
-          onMouseDown={onMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
+          className="relative"
         >
-          {/* Drag selection rectangle */}
-          {dragSelect?.active && (() => {
-            const rect = getRect(dragSelect);
-            if (!rect) return null;
-            return (
-              <div
-                className="fixed z-[55] border-2 border-primary bg-primary/10 rounded-lg pointer-events-none"
-                style={{
-                  left: rect.left,
-                  top: rect.top,
-                  width: rect.right - rect.left,
-                  height: rect.bottom - rect.top,
-                }}
-              />
-            );
-          })()}
 
           {/* Inline Selection Toolbar */}
             <AnimatePresence>
@@ -714,10 +603,7 @@ export default function Memories() {
                         <motion.div
                           key={memory.id}
                           data-photo-card
-                          ref={el => {
-                            if (el) photoRefs.current.set(memory.id, el);
-                            else photoRefs.current.delete(memory.id);
-                          }}
+
                           initial={{ opacity: 0, scale: 0.9 }}
                           animate={{ opacity: 1, scale: 1 }}
                           transition={{ delay: index * 0.03 }}
@@ -728,13 +614,7 @@ export default function Memories() {
                               openLightbox(globalIdx);
                             }
                           }}
-                          onContextMenu={(e) => {
-                            e.preventDefault();
-                            if (!selectionMode) {
-                              setSelectionMode(true);
-                              toggleSelect(memory.id);
-                            }
-                          }}
+
                           className={cn(
                             "relative cursor-pointer group overflow-hidden rounded-xl sm:rounded-2xl aspect-square",
                             isFirst && "col-span-2 row-span-2",
@@ -758,26 +638,24 @@ export default function Memories() {
                             </div>
                           )}
 
-                          {/* Hover Overlay (non-selection mode) */}
+                          {/* Hover select checkbox (non-selection mode) */}
                           {!selectionMode && (
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col justify-between p-3">
-                              {/* Select button at top-right */}
-                              <div className="flex justify-end">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setSelectionMode(true); toggleSelect(memory.id); }}
-                                  className="text-white/90 font-bold text-[10px] bg-white/20 hover:bg-white/30 backdrop-blur-sm px-2.5 py-1 rounded-lg transition-colors"
-                                >
-                                  Chọn
-                                </button>
-                              </div>
-                              {/* Title + time at bottom */}
-                              <div>
-                                <p className={cn("text-white font-bold truncate", isFirst ? "text-sm" : "text-[11px]")}>{memory.title}</p>
-                                <p className="text-white/70 text-[10px] flex items-center gap-1 mt-0.5">
-                                  <Clock size={10} />
-                                  {memory.created_at && new Date(memory.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                              </div>
+                            <div
+                              onClick={(e) => { e.stopPropagation(); setSelectionMode(true); toggleSelect(memory.id); }}
+                              className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 bg-black/30 hover:bg-black/50 cursor-pointer z-10"
+                            >
+                              <div className="w-3 h-3 rounded-full border-2 border-white/60" />
+                            </div>
+                          )}
+
+                          {/* Hover info overlay (non-selection mode) */}
+                          {!selectionMode && (
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-3 pointer-events-none">
+                              <p className={cn("text-white font-bold truncate", isFirst ? "text-sm" : "text-[11px]")}>{memory.title}</p>
+                              <p className="text-white/70 text-[10px] flex items-center gap-1 mt-0.5">
+                                <Clock size={10} />
+                                {memory.created_at && new Date(memory.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                              </p>
                             </div>
                           )}
                         </motion.div>
