@@ -29,58 +29,9 @@ const ALBUMS: AlbumDef[] = [
   { key: 'Khác', label: 'Khác', icon: <ImageIcon size={14} />, activeClass: 'bg-gray-500 text-white shadow-lg shadow-gray-500/20', inactiveClass: 'bg-surface-container-high text-on-surface-variant hover:bg-surface-variant' },
 ];
 
-// ── Date grouping ──
 
-interface DateGroup {
-  key: string;
-  label: string;
-  sublabel: string;
-  photos: any[];
-}
 
-function groupByDate(memories: any[]): DateGroup[] {
-  const now = new Date();
-  const today = now.toDateString();
-  const yesterday = new Date(now.getTime() - 86400000).toDateString();
 
-  const groups = new Map<string, any[]>();
-  memories.forEach(m => {
-    const date = new Date(m.created_at);
-    const key = date.toDateString();
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(m);
-  });
-
-  const result: DateGroup[] = [];
-  groups.forEach((photos, key) => {
-    const date = new Date(key);
-    let label: string;
-    let sublabel: string;
-
-    if (key === today) {
-      label = 'Hôm nay';
-      sublabel = date.toLocaleDateString('vi-VN', { weekday: 'long' });
-    } else if (key === yesterday) {
-      label = 'Hôm qua';
-      sublabel = date.toLocaleDateString('vi-VN', { weekday: 'long' });
-    } else {
-      label = date.toLocaleDateString('vi-VN', { day: '2-digit', month: 'long' });
-      sublabel = date.toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric' });
-    }
-
-    result.push({ key, label, sublabel, photos });
-  });
-
-  return result;
-}
-
-// ── Grid class helper ──
-
-function gridClass(count: number): string {
-  if (count <= 4) return 'grid-cols-2 md:grid-cols-4';
-  if (count <= 8) return 'grid-cols-3 md:grid-cols-4';
-  return 'grid-cols-3 md:grid-cols-6';
-}
 
 // ── Component ──
 
@@ -112,13 +63,13 @@ export default function Memories() {
 
   const [uploadFiles, setUploadFiles] = useState<{ file: File; preview: string; name: string }[]>([]);
 
-  // Filter by album
+  // Filter by album and sort by date (newest first)
   const filteredMemories = useMemo(() => {
-    if (activeAlbum === 'Tất cả') return memories;
-    return memories.filter(m => (m.album || 'Khác') === activeAlbum);
+    const filtered = activeAlbum === 'Tất cả' ? memories : memories.filter(m => (m.album || 'Khác') === activeAlbum);
+    return [...filtered].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [memories, activeAlbum]);
 
-  const dateGroups = useMemo(() => groupByDate(filteredMemories), [filteredMemories]);
+
 
   useEffect(() => {
     const fetchMemories = async () => {
@@ -270,8 +221,7 @@ export default function Memories() {
   const goNext = () => setLightboxIndex(prev => prev !== null ? Math.min(filteredMemories.length - 1, prev + 1) : null);
   const currentMemory = lightboxIndex !== null ? filteredMemories[lightboxIndex] : null;
 
-  // Map photo -> global index in filteredMemories
-  const getGlobalIndex = (photo: any) => filteredMemories.findIndex(m => m.id === photo.id);
+
 
   // Click outside to deselect
   useEffect(() => {
@@ -567,105 +517,74 @@ export default function Memories() {
               )}
             </AnimatePresence>
 
-            <div className="space-y-10">
-            {dateGroups.map(group => {
-              const count = group.photos.length;
-              const isFirstFeatured = count >= 3;
-              return (
-                <section key={group.key}>
-                  {/* Date Header */}
-                  <div className="flex items-baseline justify-between mb-4 px-1">
-                    <div>
-                      <h3 className="text-lg font-headline font-bold text-on-surface">{group.label}</h3>
-                      <p className="text-xs text-on-surface-variant">{group.sublabel}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-bold text-on-surface-variant">{count} ảnh</span>
-                      {!selectionMode && (
-                        <button
-                          onClick={() => setSelectionMode(true)}
-                          className="text-primary font-bold text-xs hover:bg-primary/10 px-3 py-1 rounded-lg transition-colors"
-                        >
-                          Chọn
-                        </button>
-                      )}
-                    </div>
-                  </div>
+            {/* Photo Grid - single layout, sorted by date, first photo featured */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3">
+              {filteredMemories.map((memory, index) => {
+                const isFirst = index === 0;
+                const isSelected = selectedIds.has(memory.id);
+                const globalIdx = index;
 
-                  {/* Photo Grid */}
-                  <div className={cn('grid gap-1.5 sm:gap-2 md:gap-3', gridClass(count))}>
-                    {group.photos.map((memory, index) => {
-                      const isSelected = selectedIds.has(memory.id);
-                      const globalIdx = getGlobalIndex(memory);
-                      const isFirst = isFirstFeatured && index === 0;
+                return (
+                  <motion.div
+                    key={memory.id}
+                    data-photo-card
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: index * 0.02 }}
+                    onClick={() => {
+                      if (selectionMode) {
+                        toggleSelect(memory.id);
+                      } else {
+                        openLightbox(globalIdx);
+                      }
+                    }}
+                    className={cn(
+                      "relative cursor-pointer group overflow-hidden rounded-xl sm:rounded-2xl aspect-square",
+                      isFirst && "col-span-2 row-span-2",
+                      selectionMode && isSelected && "ring-3 ring-primary ring-offset-2 ring-offset-background"
+                    )}
+                  >
+                    <img
+                      src={memory.image_url || memory.imageUrl}
+                      alt={memory.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      referrerPolicy="no-referrer"
+                    />
 
-                      return (
-                        <motion.div
-                          key={memory.id}
-                          data-photo-card
+                    {/* Selection Checkbox */}
+                    {selectionMode && (
+                      <div className={cn(
+                        "absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all",
+                        isSelected ? "bg-primary" : "bg-black/30 group-hover:bg-black/50"
+                      )}>
+                        {isSelected ? <Check size={14} className="text-white" /> : <div className="w-3 h-3 rounded-full border-2 border-white/60" />}
+                      </div>
+                    )}
 
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: index * 0.03 }}
-                          onClick={() => {
-                            if (selectionMode) {
-                              toggleSelect(memory.id);
-                            } else {
-                              openLightbox(globalIdx);
-                            }
-                          }}
+                    {/* Hover select checkbox (non-selection mode) */}
+                    {!selectionMode && (
+                      <div
+                        onClick={(e) => { e.stopPropagation(); setSelectionMode(true); toggleSelect(memory.id); }}
+                        className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 bg-black/30 hover:bg-black/50 cursor-pointer z-10"
+                      >
+                        <div className="w-3 h-3 rounded-full border-2 border-white/60" />
+                      </div>
+                    )}
 
-                          className={cn(
-                            "relative cursor-pointer group overflow-hidden rounded-xl sm:rounded-2xl aspect-square",
-                            isFirst && "col-span-2 row-span-2",
-                            selectionMode && isSelected && "ring-3 ring-primary ring-offset-2 ring-offset-background"
-                          )}
-                        >
-                          <img
-                            src={memory.image_url || memory.imageUrl}
-                            alt={memory.title}
-                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
-                            referrerPolicy="no-referrer"
-                          />
-
-                          {/* Selection Checkbox */}
-                          {selectionMode && (
-                            <div className={cn(
-                              "absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all",
-                              isSelected ? "bg-primary" : "bg-black/30 group-hover:bg-black/50"
-                            )}>
-                              {isSelected ? <Check size={14} className="text-white" /> : <div className="w-3 h-3 rounded-full border-2 border-white/60" />}
-                            </div>
-                          )}
-
-                          {/* Hover select checkbox (non-selection mode) */}
-                          {!selectionMode && (
-                            <div
-                              onClick={(e) => { e.stopPropagation(); setSelectionMode(true); toggleSelect(memory.id); }}
-                              className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 bg-black/30 hover:bg-black/50 cursor-pointer z-10"
-                            >
-                              <div className="w-3 h-3 rounded-full border-2 border-white/60" />
-                            </div>
-                          )}
-
-                          {/* Hover info overlay (non-selection mode) */}
-                          {!selectionMode && (
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-3 pointer-events-none">
-                              <p className={cn("text-white font-bold truncate", isFirst ? "text-sm" : "text-[11px]")}>{memory.title}</p>
-                              <p className="text-white/70 text-[10px] flex items-center gap-1 mt-0.5">
-                                <Clock size={10} />
-                                {memory.created_at && new Date(memory.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
-                              </p>
-                            </div>
-                          )}
-                        </motion.div>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
-          </div>
+                    {/* Hover info overlay (non-selection mode) - shows date + time */}
+                    {!selectionMode && (
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 p-2.5 pointer-events-none">
+                        <p className="text-white font-bold text-[10px] truncate">{memory.title}</p>
+                        <p className="text-white/70 text-[9px] flex items-center gap-1 mt-0.5">
+                          <Clock size={9} />
+                          {memory.created_at && new Date(memory.created_at).toLocaleString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
         </div>
       )}
 
