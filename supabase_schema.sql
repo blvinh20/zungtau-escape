@@ -155,3 +155,34 @@ ALTER TABLE expense_participants ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Public Access" ON expense_participants FOR ALL USING (true);
 
 ALTER TABLE expenses ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Ẩm thực';
+
+-- Settings table for app-wide configuration
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value JSONB DEFAULT '{}',
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
+
+-- Public access for demo
+CREATE POLICY "Public Access" ON settings FOR ALL USING (true);
+
+-- Initialize default settings
+INSERT INTO settings (key, value) VALUES 
+  ('treasurer_id', '""'),
+  ('settlement_payments', '{}')
+ON CONFLICT (key) DO NOTHING;
+
+-- Fund contributions table
+CREATE TABLE IF NOT EXISTS fund_contributions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  participant_id UUID REFERENCES participants(id) ON DELETE CASCADE,
+  amount NUMERIC NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+ALTER TABLE fund_contributions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public Access" ON fund_contributions FOR ALL USING (true);
+

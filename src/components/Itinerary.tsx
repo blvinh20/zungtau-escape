@@ -186,12 +186,12 @@ export default function Itinerary() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <header className="relative mb-12 mt-4 sm:mt-8 mx-4 sm:mx-6 h-48 sm:h-64 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
+      <header className="group relative mb-12 mt-4 sm:mt-8 mx-4 sm:mx-6 h-48 sm:h-64 rounded-[2rem] sm:rounded-[3rem] overflow-visible flex flex-col justify-center px-6 sm:px-12 shadow-sm border border-outline-variant/10">
         <div className="absolute inset-0 z-0 overflow-hidden rounded-[2rem] sm:rounded-[3rem]">
           <img
             src="/images/background.png"
             alt="Itinerary Background"
-            className="w-full h-full object-cover opacity-50"
+            className="w-full h-full object-cover opacity-50 group-hover:scale-105 transition-transform duration-700"
             referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-white/40 via-white/10 to-transparent" />

@@ -220,3 +220,41 @@ export const uploadImage = async (file: File, bucket: string = 'memories') => {
   const { data } = supabase.storage.from(bucket).getPublicUrl(filePath);
   return data.publicUrl;
 };
+
+// Settings functions for app-wide config (treasurer, payment status)
+export const getSetting = async (key: string) => {
+  const { data, error } = await supabase
+    .from('settings')
+    .select('value')
+    .eq('key', key)
+    .single();
+  if (error) throw error;
+  return data?.value;
+};
+
+export const setSetting = async (key: string, value: any) => {
+  const { data, error } = await supabase
+    .from('settings')
+    .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .select();
+  if (error) throw error;
+  return data[0];
+};
+
+export const getTreasurerId = async () => {
+  const value = await getSetting('treasurer_id');
+  return value || '';
+};
+
+export const setTreasurerId = async (id: string) => {
+  await setSetting('treasurer_id', id);
+};
+
+export const getSettlementPayments = async () => {
+  const value = await getSetting('settlement_payments');
+  return value || {};
+};
+
+export const setSettlementPayments = async (payments: Record<string, boolean>) => {
+  await setSetting('settlement_payments', payments);
+};

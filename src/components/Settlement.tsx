@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { useParticipants } from './ParticipantContext';
-import { getExpenses, getFundContributions } from '../lib/supabase';
+import { getExpenses, getFundContributions, getSettlementPayments, setSettlementPayments } from '../lib/supabase';
 import {
   computeMemberBalances, computePaymentPlan,
   computeCategoryBreakdown, computeStats,
@@ -58,20 +58,38 @@ export default function Settlement() {
   const [copied, setCopied] = useState(false);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
 
-  // Track payment completion state (persisted in localStorage)
-  const storageKey = 'settlement_payments_done';
-  const [completedPayments, setCompletedPayments] = useState<Record<string, boolean>>(() => {
-    try {
-      return JSON.parse(localStorage.getItem(storageKey) || '{}');
-    } catch { return {}; }
-  });
+  // Track payment completion state (persisted in database)
+  const [completedPayments, setCompletedPayments] = useState<Record<string, boolean>>({});
 
-  const togglePaymentDone = (key: string) => {
-    setCompletedPayments(prev => {
-      const next = { ...prev, [key]: !prev[key] };
-      localStorage.setItem(storageKey, JSON.stringify(next));
-      return next;
-    });
+  // Load payments from database on mount
+  useEffect(() => {
+    const loadPayments = async () => {
+      try {
+        const payments = await getSettlementPayments();
+        setCompletedPayments(payments);
+      } catch (error) {
+        console.error('Error loading settlement payments from DB:', error);
+        // Fallback to localStorage
+        try {
+          const local = localStorage.getItem('settlement_payments_done');
+          setCompletedPayments(local ? JSON.parse(local) : {});
+        } catch {}
+      }
+    };
+    loadPayments();
+  }, []);
+
+  const togglePaymentDone = async (key: string) => {
+    const next = { ...completedPayments, [key]: !completedPayments[key] };
+    setCompletedPayments(next);
+    // Save to database
+    try {
+      await setSettlementPayments(next);
+    } catch (error) {
+      console.error('Error saving settlement payments to DB:', error);
+    }
+    // Also save to localStorage as fallback
+    try { localStorage.setItem('settlement_payments_done', JSON.stringify(next)); } catch {}
   };
 
   // Fallback: fetch if no state passed (direct URL access)
@@ -134,12 +152,12 @@ export default function Settlement() {
       <motion.section
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="relative h-36 sm:h-48 rounded-[2rem] sm:rounded-[3rem] overflow-hidden mb-6 shadow-lg"
+        className="group relative h-36 sm:h-48 rounded-[2rem] sm:rounded-[3rem] overflow-hidden mb-6 shadow-lg"
       >
         <img
           src="/images/background.png"
           alt="Settlement Banner"
-          className="w-full h-full object-cover opacity-60"
+          className="w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-700"
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-primary/80 via-primary/60 to-transparent" />
