@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { motion } from 'motion/react';
-import { ArrowLeft, Plus, CheckCircle2, History, ChevronLeft, ChevronRight, ArrowUpDown, Banknote, PenLine, Info, Users } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { ArrowLeft, Plus, CheckCircle2, History, ChevronLeft, ChevronRight, ArrowUpDown, Banknote, PenLine, Info, Users, X, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { Participant } from '../types';
 
@@ -11,15 +11,73 @@ interface FundContributionViewProps {
   onAddContribution: (participantId: string, amount: number) => void | Promise<void>;
 }
 
-type SortKey = 'time' | 'name';
+type SortKey = 'time' | 'name' | 'amount';
 
 export default function FundContributionView({ participants, contributions, onBack, onAddContribution }: FundContributionViewProps) {
   const [selectedParticipants, setSelectedParticipants] = useState<string[]>([]);
   const [amount, setAmount] = useState('500000');
   const [currentPage, setCurrentPage] = useState(1);
-  const [sortKey, setSortKey] = useState<SortKey>('time');
+  const [sortKey, setSortKey] = useState<SortKey>('amount');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [historyModal, setHistoryModal] = useState<{ participantId: string; name: string } | null>(null);
   const itemsPerPage = 5;
+
+  // Aggregate contributions by participant
+  const aggregatedData = useMemo(() => {
+    const Map = new Map();
+    contributions.forEach(c => {
+      const pid = c.participant_id;
+      if (!Map.has(pid)) {
+        Map.set(pid, {
+          participantId: pid,
+          name: c.participants?.name || 'Unknown',
+          initials: c.participants?.initials || '?',
+          colorClass: c.participants?.color_class || 'bg-gray-100 text-gray-600',
+          totalAmount: 0,
+          latestContribution: c.created_at,
+          history: []
+        });
+      }
+      const entry = Map.get(pid);
+      entry.totalAmount += Number(c.amount);
+      entry.history.push(c);
+      if (new Date(c.created_at) > new Date(entry.latestContribution)) {
+        entry.latestContribution = c.created_at;
+      }
+    });
+    return Array.from(Map.values());
+  }, [contributions]);
+
+  // Sort aggregated data
+  const sortedContributions = [...aggregatedData].sort((a, b) => {
+    if (sortKey === 'time') {
+      const dateA = new Date(a.latestContribution).getTime();
+      const dateB = new Date(b.latestContribution).getTime();
+      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+    } else if (sortKey === 'amount') {
+      return sortOrder === 'desc' ? b.totalAmount - a.totalAmount : a.totalAmount - b.totalAmount;
+    } else {
+      return sortOrder === 'desc'
+        ? b.name.localeCompare(a.name)
+        : a.name.localeCompare(b.name);
+    }
+  });
+
+  const totalPages = Math.ceil(sortedContributions.length / itemsPerPage);
+  const paginatedContributions = sortedContributions.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
+    } else {
+      setSortKey(key);
+      setSortOrder('desc');
+    }
+    setCurrentPage(1);
+  };
 
   const toggleParticipant = (id: string) => {
     setSelectedParticipants(prev =>
@@ -43,45 +101,89 @@ export default function FundContributionView({ participants, contributions, onBa
     setSelectedParticipants([]);
   };
 
-  const sortedContributions = [...contributions].sort((a, b) => {
-    if (sortKey === 'time') {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
-      return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
-    } else {
-      const nameA = a.participants?.name || '';
-      const nameB = b.participants?.name || '';
-      return sortOrder === 'desc'
-        ? nameB.localeCompare(nameA)
-        : nameA.localeCompare(nameB);
-    }
-  });
-
-  const totalPages = Math.ceil(sortedContributions.length / itemsPerPage);
-  const paginatedContributions = sortedContributions.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-    } else {
-      setSortKey(key);
-      setSortOrder('desc');
-    }
-    setCurrentPage(1);
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    }).replace(',', '');
   };
+
+  // Get history for modal
+  const historyData = historyModal
+    ? contributions.filter(c => c.participant_id === historyModal.participantId)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    : [];
 
   return (
     <div className="max-w-7xl mx-auto px-6 pt-12 pb-20">
+      {/* History Modal */}
+      <AnimatePresence>
+        {historyModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setHistoryModal(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-surface-container-lowest w-full max-w-md rounded-3xl shadow-2xl overflow-hidden max-h-[80vh] flex flex-col"
+            >
+              <div className="p-6 border-b border-outline-variant/20 flex justify-between items-center shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <History size={22} className="text-primary" />
+                  </div>
+                  <h3 className="text-xl font-black font-headline">Lịch sử nộp quỹ</h3>
+                </div>
+                <button
+                  onClick={() => setHistoryModal(null)}
+                  className="p-2 hover:bg-surface-container rounded-full"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-4 overflow-y-auto flex-1">
+                <p className="text-sm font-bold text-secondary mb-4">Lịch sử nộp quỹ của <span className="text-primary">{historyModal.name}</span></p>
+                <div className="space-y-2">
+                  {historyData.map((c, idx) => (
+                    <div key={c.id || idx} className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} className="text-secondary" />
+                        <span className="text-xs font-medium text-secondary">{formatDateTime(c.created_at)}</span>
+                      </div>
+                      <span className="text-sm font-black text-primary">{Number(c.amount).toLocaleString('vi-VN')}đ</span>
+                    </div>
+                  ))}
+                  {historyData.length === 0 && (
+                    <p className="text-center py-8 text-secondary text-sm italic">Chưa có lịch sử nộp quỹ</p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="mb-16">
         <div className="flex items-center gap-4 mb-6">
           <button
             onClick={onBack}
             className="p-2 text-primary hover:bg-primary/10 rounded-full transition-all"
           >
-            <ArrowLeft size={18} className="group-hover:-translate-x-1 transition-transform" />
+            <ArrowLeft size={18} />
           </button>
           <span className="text-2xl font-bold text-primary font-headline">Quay lại</span>
         </div>
@@ -116,46 +218,65 @@ export default function FundContributionView({ participants, contributions, onBa
                 >
                   Thời gian <ArrowUpDown size={14} />
                 </button>
+                <button
+                  onClick={() => toggleSort('amount')}
+                  className={cn(
+                    "flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                    sortKey === 'amount' ? "bg-primary text-white shadow-lg shadow-primary/20" : "bg-surface-container-low text-secondary hover:bg-surface-container"
+                  )}
+                >
+                  SỐ TIỀN <ArrowUpDown size={14} />
+                </button>
               </div>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-outline-variant/10 overflow-hidden">
-              <table className="w-full border-separate border-spacing-y-4">
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-6 shadow-sm border border-outline-variant/10 overflow-hidden">
+              <table className="w-full border-separate border-spacing-y-3">
                 <thead>
                   <tr className="text-secondary text-[10px] font-bold uppercase tracking-widest text-left">
-                    <th className="pb-2 px-4">THÀNH VIÊN</th>
-                    <th className="pb-2 px-4">THỜI GIAN</th>
-                    <th className="pb-2 px-4 text-right">SỐ TIỀN</th>
+                    <th className="pb-2 px-3">
+                      <button className="flex items-center gap-1 hover:text-primary transition-colors">THÀNH VIÊN</button>
+                    </th>
+                    <th className="pb-2 px-3">
+                      <button className="flex items-center gap-1 hover:text-primary transition-colors">THỜI GIAN</button>
+                    </th>
+                    <th className="pb-2 px-3 text-right">
+                      <button className="inline-flex items-center gap-1 hover:text-primary transition-colors">SỐ TIỀN</button>
+                    </th>
+                    <th className="pb-2 px-3 w-10"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedContributions.map((c) => (
-                    <tr key={c.id} className="group hover:bg-surface-container-low transition-colors">
-                      <td className="py-4 px-4 rounded-l-2xl border-y border-l border-outline-variant/5">
-                        <div className="flex items-center gap-4">
-                          <div className={cn("w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", c.participants?.color_class)}>
-                            {c.participants?.initials}
+                    <tr key={c.participantId} className="group hover:bg-surface-container-low transition-colors">
+                      <td className="py-3 px-3 rounded-l-2xl border-y border-l border-outline-variant/5">
+                        <div className="flex items-center gap-3">
+                          <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", c.colorClass)}>
+                            {c.initials}
                           </div>
-                          <span className="text-base font-bold">{c.participants?.name}</span>
+                          <span className="text-sm font-bold">{c.name}</span>
                         </div>
                       </td>
-                      <td className="py-4 px-4 border-y border-outline-variant/5 text-sm text-secondary font-medium">
-                        {new Date(c.created_at).toLocaleString('vi-VN', {
-                          day: '2-digit',
-                          month: '2-digit',
-                          year: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        }).replace(',', '')}
+                      <td className="py-3 px-3 border-y border-outline-variant/5 text-xs text-secondary font-medium">
+                        {formatDateTime(c.latestContribution)}
                       </td>
-                      <td className="py-4 px-4 rounded-r-2xl border-y border-r border-outline-variant/5 text-right font-black text-primary text-lg">
-                        {Number(c.amount).toLocaleString('vi-VN')}đ
+                      <td className="py-3 px-3 border-y border-outline-variant/5 text-right font-black text-primary">
+                        {c.totalAmount.toLocaleString('vi-VN')}đ
+                      </td>
+                      <td className="py-3 px-3 rounded-r-2xl border-y border-r border-outline-variant/5">
+                        <button
+                          onClick={() => setHistoryModal({ participantId: c.participantId, name: c.name })}
+                          className="p-2 hover:bg-surface-container rounded-xl text-secondary opacity-0 group-hover:opacity-100 transition-all"
+                          title="Xem lịch sử"
+                        >
+                          <History size={16} />
+                        </button>
                       </td>
                     </tr>
                   ))}
                   {paginatedContributions.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="py-20 text-center text-secondary text-sm font-medium italic">
+                      <td colSpan={4} className="py-20 text-center text-secondary text-sm font-medium italic">
                         Chưa có lịch sử nộp quỹ nào
                       </td>
                     </tr>
@@ -164,13 +285,13 @@ export default function FundContributionView({ participants, contributions, onBa
               </table>
 
               {totalPages > 1 && (
-                <div className="flex items-center justify-center gap-6 mt-10">
+                <div className="flex items-center justify-center gap-6 mt-8">
                   <button
                     onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="p-3 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
+                    className="p-2.5 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
                   >
-                    <ChevronLeft size={20} />
+                    <ChevronLeft size={18} />
                   </button>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-secondary uppercase tracking-widest">TRANG</span>
@@ -181,9 +302,9 @@ export default function FundContributionView({ participants, contributions, onBa
                   <button
                     onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="p-3 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
+                    className="p-2.5 rounded-2xl bg-surface-container-low text-secondary disabled:opacity-30 transition-all hover:bg-surface-container active:scale-90"
                   >
-                    <ChevronRight size={20} />
+                    <ChevronRight size={18} />
                   </button>
                 </div>
               )}
@@ -200,7 +321,7 @@ export default function FundContributionView({ participants, contributions, onBa
               <h2 className="text-3xl font-black font-headline">Nộp quỹ</h2>
             </div>
 
-            <div className="bg-white rounded-[2.5rem] p-10 shadow-xl shadow-primary/5 border border-outline-variant/10 relative overflow-hidden">
+            <div className="bg-surface-container-lowest rounded-[2.5rem] p-10 shadow-xl shadow-primary/5 border border-outline-variant/10 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -mr-16 -mt-16 blur-3xl" />
 
               <div className="space-y-8 relative z-10">
@@ -221,7 +342,7 @@ export default function FundContributionView({ participants, contributions, onBa
                       {selectedParticipants.length === participants.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                     </button>
                   </div>
-                  <div className="bg-[#fdfaf5] rounded-2xl p-4 max-h-48 overflow-y-auto scrollbar-hide space-y-1 border border-outline-variant/5">
+                  <div className="bg-surface-container-low rounded-2xl p-4 max-h-48 overflow-y-auto scrollbar-hide space-y-1">
                     {participants.map(p => (
                       <label
                         key={p.id}
@@ -229,7 +350,7 @@ export default function FundContributionView({ participants, contributions, onBa
                           "flex items-center gap-3 p-2.5 rounded-xl cursor-pointer transition-all",
                           selectedParticipants.includes(p.id)
                             ? "bg-primary/10"
-                            : "hover:bg-[#f9f4eb]"
+                            : "hover:bg-surface-container"
                         )}
                       >
                         <input
@@ -286,7 +407,7 @@ export default function FundContributionView({ participants, contributions, onBa
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       placeholder="Hoặc nhập số tiền khác..."
-                      className="w-full bg-[#fdfaf5] border-none rounded-2xl pl-14 pr-14 py-5 focus:ring-2 focus:ring-primary font-black text-2xl transition-all hover:bg-[#f9f4eb]"
+                      className="w-full bg-surface-container-low border-none rounded-2xl pl-14 pr-14 py-5 focus:ring-2 focus:ring-primary font-black text-2xl transition-all"
                     />
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-primary/10 px-3 py-1.5 rounded-lg font-bold text-primary text-sm">
                       đ
@@ -305,7 +426,6 @@ export default function FundContributionView({ participants, contributions, onBa
               </div>
             </div>
           </section>
-
         </div>
       </div>
     </div>

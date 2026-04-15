@@ -50,6 +50,15 @@
 
   --color-error: #ba1a1a;
 
+  /* Dark Mode Colors */
+  --color-dark-background: #0a0a0a;
+  --color-dark-surface: #121212;
+  --color-dark-surface-container: #1e1e1e;
+  --color-dark-surface-container-low: #252525;
+  --color-dark-surface-container-lowest: #2a2a2a;
+  --color-dark-on-surface: #e6e6e1;
+  --color-dark-on-surface-variant: #a3a3a0;
+
   /* Sharp corners - 0.25rem = 4px */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -64,6 +73,22 @@
     /* Soft easing for all transitions - gentle water flow */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Dark mode - override colors using Tailwind's dark: variant */
+  .dark {
+    --color-background: #0a0a0a;
+    --color-surface: #121212;
+    --color-surface-container-low: #252525;
+    --color-surface-container: #1e1e1e;
+    --color-surface-container-high: #2a2a2a;
+    --color-surface-container-lowest: #2a2a2a;
+    --color-on-surface: #e6e6e1;
+    --color-on-surface-variant: #a3a3a0;
+    --color-outline-variant: #3a3a3a;
+    --color-primary: #4da6d9;
+    --color-secondary: #d4875a;
+    --color-tertiary: #b8a940;
   }
 
   /* Headlines use Newsreader for editorial feel */
