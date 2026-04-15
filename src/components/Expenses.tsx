@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown, Flag, Eye, Camera, ShieldCheck } from 'lucide-react';
+import { Wallet, Plus, X, UserPlus, Loader2, Calendar, DollarSign, Tag, Trash2, Edit2, AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, PiggyBank, Receipt, ArrowUpDown, Flag, Eye, Camera, ShieldCheck, History, Clock } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { getExpenses, addExpense as addExpenseSupabase, deleteExpense as deleteExpenseSupabase, updateExpense as updateExpenseSupabase, getFundContributions, addFundContribution, deleteFundContribution } from '../lib/supabase';
 import ConfirmModal from './ConfirmModal';
@@ -32,10 +32,38 @@ export default function Expenses() {
   // Fund modal state
   const [fundSelectedParticipants, setFundSelectedParticipants] = useState<string[]>([]);
   const [fundAmount, setFundAmount] = useState('500000');
-  const [fundSortKey, setFundSortKey] = useState<'time' | 'name' | 'amount'>('time');
+  const [fundSortKey, setFundSortKey] = useState<'time' | 'name' | 'amount' | 'total'>('time');
   const [fundSortOrder, setFundSortOrder] = useState<'asc' | 'desc'>('desc');
   const [fundCurrentPage, setFundCurrentPage] = useState(1);
+  const [fundHistoryModal, setFundHistoryModal] = useState<{ participantId: string; name: string } | null>(null);
   const fundItemsPerPage = 5;
+
+  // Aggregate fund contributions by participant
+  const aggregatedFundData = useMemo(() => {
+    const fundMap = new Map();
+    fundContributions.forEach(c => {
+      const pid = c.participant_id;
+      if (!fundMap.has(pid)) {
+        fundMap.set(pid, {
+          participantId: pid,
+          name: c.participants?.name || 'Unknown',
+          initials: c.participants?.initials || '?',
+          colorClass: c.participants?.color_class || 'bg-gray-100 text-gray-600',
+          avatarUrl: c.participants?.avatar_url || null,
+          totalAmount: 0,
+          latestContribution: c.created_at,
+          history: []
+        });
+      }
+      const entry = fundMap.get(pid);
+      entry.totalAmount += Number(c.amount);
+      entry.history.push(c);
+      if (new Date(c.created_at) > new Date(entry.latestContribution)) {
+        entry.latestContribution = c.created_at;
+      }
+    });
+    return Array.from(fundMap.values());
+  }, [fundContributions]);
 
   const [confirmConfig, setConfirmConfig] = useState<{
     isOpen: boolean;
@@ -263,28 +291,25 @@ export default function Expenses() {
     }
   };
 
-  const sortedFundContributions = [...fundContributions].sort((a, b) => {
-    if (fundSortKey === 'time') {
-      return fundSortOrder === 'desc'
-        ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        : new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  // Use aggregated data for fund list (grouped by participant with total)
+  const sortedFundData = [...aggregatedFundData].sort((a, b) => {
+    if (fundSortKey === 'time' || fundSortKey === 'total') {
+      const dateA = new Date(a.latestContribution).getTime();
+      const dateB = new Date(b.latestContribution).getTime();
+      return fundSortOrder === 'desc' ? dateB - dateA : dateA - dateB;
     } else if (fundSortKey === 'amount') {
-      return fundSortOrder === 'desc'
-        ? Number(b.amount) - Number(a.amount)
-        : Number(a.amount) - Number(b.amount);
+      return fundSortOrder === 'desc' ? b.totalAmount - a.totalAmount : a.totalAmount - b.totalAmount;
     }
-    const nameA = a.participants?.name || '';
-    const nameB = b.participants?.name || '';
-    return fundSortOrder === 'desc' ? nameB.localeCompare(nameA) : nameA.localeCompare(nameB);
+    return fundSortOrder === 'desc' ? b.name.localeCompare(a.name) : a.name.localeCompare(b.name);
   });
 
-  const fundTotalPages = Math.ceil(sortedFundContributions.length / fundItemsPerPage);
-  const paginatedFundContributions = sortedFundContributions.slice(
+  const fundTotalPages = Math.ceil(sortedFundData.length / fundItemsPerPage);
+  const paginatedFundContributions = sortedFundData.slice(
     (fundCurrentPage - 1) * fundItemsPerPage,
     fundCurrentPage * fundItemsPerPage
   );
 
-  const toggleFundSort = (key: 'time' | 'name' | 'amount') => {
+  const toggleFundSort = (key: 'time' | 'name' | 'amount' | 'total') => {
     if (fundSortKey === key) {
       setFundSortOrder(fundSortOrder === 'desc' ? 'asc' : 'desc');
     } else {
@@ -293,6 +318,20 @@ export default function Expenses() {
     }
     setFundCurrentPage(1);
   };
+
+  // Format date helper
+  const formatDateTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleString('vi-VN', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    }).replace(',', '');
+  };
+
+  // Get history for modal
+  const historyData = fundHistoryModal
+    ? fundContributions.filter(c => c.participant_id === fundHistoryModal.participantId)
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-8 sm:pt-12 pb-20">
@@ -847,35 +886,45 @@ export default function Expenses() {
                       </thead>
                       <tbody>
                         {paginatedFundContributions.map((c) => (
-                          <tr key={c.id} className="group hover:bg-surface-container-low transition-colors">
+                          <tr key={c.participantId} className="group hover:bg-surface-container-low transition-colors">
                             <td className="py-3 px-3 rounded-l-2xl border-y border-l border-outline-variant/5">
                               <div className="flex items-center gap-3">
-                                {c.participants?.avatar_url ? (
-                                  <img src={c.participants.avatar_url} alt={c.participants?.name} className="w-9 h-9 rounded-full object-cover shadow-sm" />
+                                {c.avatarUrl ? (
+                                  <img src={c.avatarUrl} alt={c.name} className="w-9 h-9 rounded-full object-cover shadow-sm" />
                                 ) : (
-                                  <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", c.participants?.color_class)}>
-                                    {c.participants?.initials}
+                                  <div className={cn("w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shadow-sm", c.colorClass)}>
+                                    {c.initials}
                                   </div>
                                 )}
-                                <span className="text-sm font-bold">{c.participants?.name}</span>
+                                <span className="text-sm font-bold">{c.name}</span>
                               </div>
                             </td>
                             <td className="py-3 px-3 border-y border-outline-variant/5 text-xs text-secondary font-medium">
-                              {new Date(c.created_at).toLocaleString('vi-VN', {
-                                day: '2-digit', month: '2-digit', year: 'numeric',
-                                hour: '2-digit', minute: '2-digit'
-                              }).replace(',', '')}
+                              {formatDateTime(c.latestContribution)}
                             </td>
                             <td className="py-3 px-3 border-y border-outline-variant/5 text-right font-black text-primary">
-                              {Number(c.amount).toLocaleString('vi-VN')}đ
+                              {c.totalAmount.toLocaleString('vi-VN')}đ
                             </td>
                             <td className="py-3 px-3 rounded-r-2xl border-y border-r border-outline-variant/5">
-                              <button
-                                onClick={() => handleDeleteFundContribution(c.id)}
-                                className="p-2 hover:bg-red-100 rounded-xl text-red-400 opacity-0 group-hover:opacity-100 transition-all"
-                              >
-                                <Trash2 size={16} />
-                              </button>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setFundHistoryModal({ participantId: c.participantId, name: c.name })}
+                                  className="p-2 hover:bg-surface-container rounded-xl text-secondary opacity-0 group-hover:opacity-100 transition-all"
+                                  title="Xem lịch sử"
+                                >
+                                  <History size={16} />
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    // Delete all contributions from this participant
+                                    c.history.forEach((h: any) => handleDeleteFundContribution(h.id));
+                                  }}
+                                  className="p-2 hover:bg-red-100 rounded-xl text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                                  title="Xóa tất cả"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -918,6 +967,59 @@ export default function Expenses() {
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Fund History Modal */}
+      <AnimatePresence>
+        {fundHistoryModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[120] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              onClick={() => setFundHistoryModal(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative bg-surface-container-lowest w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-5 border-b border-outline-variant/20 flex justify-between items-center">
+                <div className="flex items-center gap-2">
+                  <History size={18} className="text-primary" />
+                  <h3 className="text-lg font-bold font-headline">Lịch sử nộp quỹ</h3>
+                </div>
+                <button onClick={() => setFundHistoryModal(null)} className="p-2 hover:bg-surface-container rounded-full">
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="p-5">
+                <p className="text-sm font-bold text-secondary mb-4">Lịch sử nộp quỹ của <span className="text-primary">{fundHistoryModal.name}</span></p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {historyData.map((c, idx) => (
+                    <div key={c.id || idx} className="flex items-center justify-between p-3 bg-surface-container-low rounded-xl">
+                      <div className="flex items-center gap-2">
+                        <Clock size={14} className="text-secondary" />
+                        <span className="text-xs font-medium text-secondary">{formatDateTime(c.created_at)}</span>
+                      </div>
+                      <span className="text-sm font-black text-primary">{Number(c.amount).toLocaleString('vi-VN')}đ</span>
+                    </div>
+                  ))}
+                  {historyData.length === 0 && (
+                    <p className="text-center py-6 text-secondary text-sm italic">Chưa có lịch sử nộp quỹ</p>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
 
